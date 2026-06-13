@@ -18,6 +18,7 @@
   const continueButton = document.querySelector('#continue-button');
   const soundToggle = document.querySelector('#sound-toggle');
   const volumeRange = document.querySelector('#volume-range');
+  const combatFeed = document.querySelector('#combat-feed');
 
   const ui = {
     level: document.querySelector('#level-value'),
@@ -39,6 +40,7 @@
   let bestLength = Number.parseInt(localStorage.getItem(C.STORAGE_KEY) || '0', 10) || 0;
   let lastFrame = 0;
   let audioContext = null;
+  const feedItems = [];
 
   C.VIEWPORT_PRESETS.forEach((preset, index) => {
     const option = document.createElement('option');
@@ -82,6 +84,7 @@
     settingsPanel.classList.add('is-hidden');
     modal.classList.add('is-hidden');
     cardModal.classList.add('is-hidden');
+    clearFeed();
     gameScreen.classList.remove('is-hidden');
     lastFrame = performance.now();
   }
@@ -107,6 +110,7 @@
       input.viewport = viewport;
       Game.stepGame(game, input, dt);
       playEvents(game.events);
+      processAnnouncements(game.events);
       updateHud();
       renderer.render(game, viewport);
     } else if (game && game.status === 'card-select') {
@@ -187,12 +191,60 @@
       button.innerHTML = `<span class="card-rarity ${card.rarity}">${C.RARITY_LABELS[card.rarity]}</span><strong>${card.title}</strong><p>${card.desc}</p>`;
       button.addEventListener('click', () => {
         Game.resolvePlayerCard(game, card.id);
+        addFeed(`选择卡牌：${card.title}`, 'reward');
         cardModal.classList.add('is-hidden');
         playTone(920, 0.12, 'triangle');
       });
       cardOptions.append(button);
     }
     cardModal.classList.remove('is-hidden');
+  }
+
+
+  function processAnnouncements(events = []) {
+    for (const event of events) {
+      if (!event.player) continue;
+      if (event.type === 'level') addFeed('你升级了！请选择一张卡牌。', 'reward');
+      if (event.type === 'card') addFeed('卡牌效果已生效。', 'reward');
+      if (event.type === 'shieldGain') addFeed('你的一个身体部位获得了护盾！', 'reward');
+      if (event.type === 'turretInstall') addFeed(`你安装了一座${C.TURRET_TYPES[event.turret]?.label || '炮塔'}！`, 'reward');
+      if (event.type === 'playerKill') addFeed('你击杀了一名敌人！', 'reward');
+      if (event.type === 'pop') {
+        addFeed('你的身体被打碎了一节！', 'danger');
+        if (event.lostTurret) addFeed('你的一个炮塔被摧毁了！', 'danger');
+        if (event.lostShield) addFeed('你的护盾被打爆了！', 'danger');
+      }
+      if (event.type === 'shieldHit') addFeed('护盾正在吸收伤害！');
+      if (event.type === 'poisonEnter') addFeed('你进入了毒云区域，尾部正在被腐蚀！', 'danger');
+      if (event.type === 'poisonLeave') addFeed('你离开了毒云区域。');
+      if (event.type === 'iceEnter') addFeed('你进入冰冻区域，移动速度下降！', 'danger');
+      if (event.type === 'bossWarn') addFeed('Boss 正在蓄力范围重击，快离开红圈！', 'danger');
+      if (event.type === 'bossAoeHit') addFeed('你被 Boss 重击命中！', 'danger');
+      if (event.type === 'powerup') addFeed('你获得了稀有道具！', 'reward');
+      if (event.type === 'chest') addFeed('你获得了宝箱奖励！', 'reward');
+      if (event.type === 'playerDeath') addFeed(event.reason === 'headDestroyed' ? '只剩头部后被武器击毁，游戏结束！' : '你撞到敌人身体或被击败，游戏结束！', 'danger');
+    }
+  }
+
+  function addFeed(message, tone = '') {
+    if (!combatFeed || feedItems[0]?.message === message) return;
+    const item = document.createElement('div');
+    item.className = `feed-item ${tone}`.trim();
+    item.textContent = message;
+    combatFeed.prepend(item);
+    feedItems.unshift({ message, item });
+    while (feedItems.length > 5) feedItems.pop().item.remove();
+    setTimeout(() => {
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(-0.8rem)';
+      item.style.transition = 'opacity 320ms ease, transform 320ms ease';
+      setTimeout(() => item.remove(), 340);
+    }, 4200);
+  }
+
+  function clearFeed() {
+    feedItems.splice(0, feedItems.length);
+    if (combatFeed) combatFeed.innerHTML = '';
   }
 
   function playEvents(events = []) {
@@ -206,6 +258,9 @@
       if (event.type === 'pop') playTone(90, 0.08, 'triangle');
       if (event.type === 'playerDeath') playTone(70, 0.35, 'sawtooth');
       if (event.type === 'bossShoot') playTone(150, 0.04, 'sawtooth');
+      if (event.type === 'missile' && event.player) playTone(340, 0.08, 'sawtooth');
+      if (event.type === 'bossAoeHit' && event.player) playTone(95, 0.28, 'sawtooth');
+      if (event.type === 'bossWarn' && event.player) playTone(180, 0.16, 'sawtooth');
       if (event.type === 'bossDeath') playTone(60, 0.5, 'triangle');
       if (event.type === 'powerup') playTone(980, 0.16, 'triangle');
       if (event.type === 'chest') playTone(620, 0.12, 'sine');

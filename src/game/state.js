@@ -25,6 +25,7 @@
     { id: 'shotgun', title: '散弹枪塔', rarity: 'rare', desc: '获得 1 个近距离高伤炮塔', type: 'turret', turret: 'shotgun' },
     { id: 'flame', title: '火焰炮塔', rarity: 'rare', desc: '获得 1 个近中距离扇形燃烧炮塔', type: 'turret', turret: 'flame' },
     { id: 'laser', title: '激光塔', rarity: 'legendary', desc: '获得 1 个短中距离精准激光塔', type: 'turret', turret: 'laser' },
+    { id: 'missile', title: '导弹塔', rarity: 'epic', desc: '获得 1 座慢速追踪爆炸导弹塔', type: 'turret', turret: 'missile' },
     { id: 'ammo', title: '强化弹药', rarity: 'rare', desc: '所有炮塔伤害 +10%', type: 'mod', key: 'damageBonus', amount: 0.1, max: 1 },
     { id: 'reload', title: '快速装填', rarity: 'rare', desc: '所有炮塔攻速 +10%', type: 'mod', key: 'fireRateBonus', amount: 0.1, max: 0.75 },
     { id: 'range', title: '扩大射程', rarity: 'common', desc: '所有炮塔射程 +10%', type: 'mod', key: 'rangeBonus', amount: 0.1, max: 0.75 },
@@ -41,6 +42,7 @@
     { id: 'skin-regen', title: '再生外皮', rarity: 'epic', desc: '非燃烧/非毒云时战斗中也缓慢回血', type: 'mod', key: 'combatRegen', amount: 1, max: 1 },
     { id: 'head-repair', title: '头部修复', rarity: 'rare', desc: '头部受损时额外 +2 HP/s', type: 'mod', key: 'headRepairBonus', amount: 2, max: 2 },
     { id: 'life-cycle', title: '生命循环', rarity: 'epic', desc: '离开毒云后尾部回血 +2 HP/s', type: 'mod', key: 'tailRegenBonus', amount: 2, max: 2 },
+    { id: 'shotgun-plus', title: '散弹扩容', rarity: 'rare', desc: '所有散弹枪每次攻击 +1 发（最多 +5）', type: 'mod', key: 'shotgunBonus', amount: 1, max: 5 },
   ]);
 
   function createGame(options = {}) {
@@ -68,6 +70,10 @@
       beans: [],
       chests: [],
       powerups: [],
+      obstacles: createObstacles(),
+      iceZones: createIceZones(),
+      effects: [],
+      bossWarnings: [],
       bosses: createBosses(),
       poisonZones: createPoisonZones(),
       projectiles: [],
@@ -110,23 +116,26 @@
       effects: { invincible: 0, giant: 0 },
       poisonTimer: 0,
       inPoison: false,
+      wasInPoison: false,
+      chilledTimer: 0,
+      wasIced: false,
       headDamaged: false,
-      mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0, regenBonus: 0, regenDelayReduction: 0, combatRegen: 0, headRepairBonus: 0, tailRegenBonus: 0, magnetStacks: 0 },
+      mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0, regenBonus: 0, regenDelayReduction: 0, combatRegen: 0, headRepairBonus: 0, tailRegenBonus: 0, magnetStacks: 0, shotgunBonus: 0 },
       segments: Array.from({ length: C.INITIAL_SEGMENTS }, createSegment),
       trail: Array.from({ length: 24 }, (_, index) => ({ x: wrap(head.x - Math.cos(angle) * index * C.SEGMENT_SPACING), y: wrap(head.y - Math.sin(angle) * index * C.SEGMENT_SPACING) })),
     };
   }
 
   function createSegment() {
-    return { hp: C.SEGMENT_HP, maxHp: C.SEGMENT_HP, shield: false, turret: null, lastDamageAt: 0, burn: 0, burnTick: 0 };
+    return { hp: C.SEGMENT_HP, maxHp: C.SEGMENT_HP, shield: false, turret: null, lastDamageAt: 0, burn: 0, burnTick: 0, flash: 0 };
   }
 
 
   function createPoisonZones() {
     return [
-      { x: 850, y: 980, radius: 320 },
-      { x: 3180, y: 1100, radius: 280 },
-      { x: 2200, y: 3180, radius: 360 },
+      { x: 850, y: 980, radius: 680 },
+      { x: 3180, y: 1100, radius: 620 },
+      { x: 2200, y: 3180, radius: 760 },
     ];
   }
 
@@ -149,8 +158,36 @@
       attackTimer: randomRange(0.2, C.BOSS_CONFIG.attackInterval),
       ringTimer: randomRange(2, C.BOSS_CONFIG.ringInterval),
       spitTimer: randomRange(0.5, C.BOSS_CONFIG.spitInterval),
+      aoeTimer: randomRange(3, C.BOSS_CONFIG.aoeInterval),
+      aoeWarning: 0,
       angle: 0,
     };
+  }
+
+
+
+  function createObstacles() {
+    const fixed = [
+      { x: 620, y: 3200, radius: 72, kind: 'rock' }, { x: 960, y: 3020, radius: 48, kind: 'stump' },
+      { x: 3340, y: 760, radius: 66, kind: 'rock' }, { x: 3020, y: 980, radius: 42, kind: 'stump' },
+      { x: 1780, y: 2060, radius: 78, kind: 'ice' }, { x: 2600, y: 2460, radius: 58, kind: 'rock' },
+      { x: 1320, y: 1480, radius: 45, kind: 'stump' }, { x: 3600, y: 2420, radius: 88, kind: 'rock' },
+    ];
+    const generated = Array.from({ length: 28 }, (_, index) => ({
+      x: wrap(320 + (index * 523) % 3360),
+      y: wrap(460 + (index * 337) % 3180),
+      radius: [28, 34, 42, 56][index % 4],
+      kind: ['rock', 'stump', 'rock', 'ice'][index % 4],
+    })).filter((item) => distance(item, { x: C.WORLD_SIZE / 2, y: C.WORLD_SIZE / 2 }) > 520);
+    return fixed.concat(generated);
+  }
+
+  function createIceZones() {
+    return [
+      { x: 680, y: 2050, radius: 230 }, { x: 1680, y: 720, radius: 210 },
+      { x: 2820, y: 1840, radius: 260 }, { x: 3360, y: 3280, radius: 240 },
+      { x: 1440, y: 3360, radius: 200 }, { x: 2380, y: 920, radius: 185 },
+    ];
   }
 
   function stepGame(state, input, dt) {
@@ -162,6 +199,8 @@
     updatePlayerAim(state, input);
     updateAiSnakes(state, dt);
     updateEffects(state, dt);
+    updateTerrainEffects(state, dt);
+    updateVisualEffects(state, dt);
     moveSnakes(state, dt);
     updateBeans(state, dt);
     collectBeans(state);
@@ -170,6 +209,7 @@
     updateBurning(state, dt);
     updateRegeneration(state, dt);
     updateBosses(state, dt);
+    updateBossWarnings(state, dt);
     updateTurrets(state, dt);
     updateProjectiles(state, dt);
     resolveCollisions(state);
@@ -200,6 +240,41 @@
         snake.effects.giant = Math.max(0, snake.effects.giant - dt);
         if (snake.effects.giant === 0) endGiant(snake);
       }
+    }
+  }
+
+
+  function updateTerrainEffects(state, dt) {
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      const inIce = getSnakeSegments(snake).some((segment) => state.iceZones.some((zone) => distance(segment, zone) <= zone.radius));
+      if (inIce) snake.chilledTimer = C.ICE_LINGER_SECONDS;
+      else snake.chilledTimer = Math.max(0, snake.chilledTimer - dt);
+      if (snake.isPlayer && inIce && !snake.wasIced) state.events.push({ type: 'iceEnter', player: true });
+      snake.wasIced = inIce;
+    }
+  }
+
+  function updateVisualEffects(state, dt) {
+    for (let index = state.effects.length - 1; index >= 0; index -= 1) {
+      const effect = state.effects[index];
+      effect.ttl -= dt;
+      if (effect.ttl <= 0) state.effects.splice(index, 1);
+    }
+    for (const snake of state.snakes) {
+      for (const segment of snake.segments) if (segment.flash > 0) segment.flash = Math.max(0, segment.flash - dt);
+    }
+  }
+
+  function pushSnakeOutOfObstacles(state, snake) {
+    const radius = getSnakeRadius(snake);
+    for (const obstacle of state.obstacles) {
+      const d = distance(snake, obstacle);
+      const minDistance = radius + obstacle.radius;
+      if (d <= 0 || d >= minDistance) continue;
+      const angle = angleTo(obstacle, snake);
+      snake.x = wrap(obstacle.x + Math.cos(angle) * minDistance);
+      snake.y = wrap(obstacle.y + Math.sin(angle) * minDistance);
     }
   }
 
@@ -271,10 +346,12 @@
       const base = snake.isPlayer ? C.PLAYER_SPEED : C.AI_SPEED;
       const boost = snake.isPlayer ? C.BOOST_SPEED : C.AI_BOOST_SPEED;
       const headPenalty = snake.headDamaged ? C.HEAD_DAMAGED_SPEED_MULTIPLIER : 1;
-      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus) * headPenalty;
+      const icePenalty = snake.chilledTimer > 0 ? C.ICE_SLOW_MULTIPLIER : 1;
+      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus) * headPenalty * icePenalty;
       snake.angle = turnToward(snake.angle, snake.targetAngle, C.TURN_RATE * dt);
       snake.x = wrap(snake.x + Math.cos(snake.angle) * speed * dt);
       snake.y = wrap(snake.y + Math.sin(snake.angle) * speed * dt);
+      pushSnakeOutOfObstacles(state, snake);
       snake.trail.unshift({ x: snake.x, y: snake.y });
       snake.trail.length = Math.min(snake.trail.length, Math.ceil((snake.segments.length + 10) * C.SEGMENT_SPACING / 5));
       if (boosting) snake.boostEnergy = clamp(snake.boostEnergy - C.BOOST_DRAIN_PER_SECOND * dt, 0, 100);
@@ -400,10 +477,16 @@
   function applyCard(state, snake, card) {
     if (!card) return;
     if (card.type === 'body') addSegments(snake, card.amount);
-    if (card.type === 'turret') snake.pendingTurrets.push(card.turret);
+    if (card.type === 'turret') {
+      snake.pendingTurrets.push(card.turret);
+      if (snake.isPlayer) state.events.push({ type: 'turretInstall', player: true, turret: card.turret });
+    }
     if (card.type === 'mod') snake.mods[card.key] = clamp(snake.mods[card.key] + card.amount, 0, card.max ?? 10);
     if (card.type === 'hp') increaseMaxHp(snake, card.amount);
-    if (card.type === 'shield') installShield(snake);
+    if (card.type === 'shield') {
+      installShield(snake);
+      if (snake.isPlayer) state.events.push({ type: 'shieldGain', player: true });
+    }
     if (card.type === 'repair') repairSnake(snake, card.amount);
     if (card.type === 'magnet') {
       snake.magnetRange += card.amount;
@@ -528,42 +611,84 @@
     const targetSnake = turret.target.snakeId ? state.snakes.find((snake) => snake.id === turret.target.snakeId && snake.alive) : null;
     const targetPoint = bossTarget || (targetSnake ? getSnakeSegments(targetSnake)[turret.target.segmentIndex] : null);
     if (!targetPoint) return;
+    if (lineBlockedByObstacle(state, origin, targetPoint) && def.kind !== 'missile') return;
     const damage = def.damage * (1 + owner.mods.damageBonus) * (owner.effects.giant > 0 ? 2 : 1);
     if (def.kind === 'projectile') {
       const angle = angleTo(origin, targetPoint);
-      state.projectiles.push({ id: `projectile-${nextProjectileId++}`, ownerId: owner.id, x: origin.x, y: origin.y, vx: Math.cos(angle) * def.projectileSpeed, vy: Math.sin(angle) * def.projectileSpeed, damage, ttl: 1.2, color: def.color });
+      state.projectiles.push(createProjectile(owner, origin, angle, def.projectileSpeed, damage, 1.2, owner.color, 'machine'));
+    } else if (def.kind === 'shotgun') {
+      fireShotgun(state, owner, origin, targetPoint, def, damage);
+    } else if (def.kind === 'missile') {
+      fireMissile(state, owner, origin, turret.target, targetPoint, def, damage);
     } else if (def.kind === 'flame') {
       fireFlameCone(state, owner, origin, targetPoint, def, damage);
     } else {
       if (bossTarget) damageBoss(state, bossTarget, damage, owner);
       else applyDamage(state, targetSnake, turret.target.segmentIndex, damage, owner);
-      state.lasers.push({ from: origin, to: targetPoint, color: def.color, ttl: 0.08, kind: def.kind });
+      state.lasers.push({ from: origin, to: targetPoint, color: owner.color, ttl: 0.1, kind: def.kind });
+      addEffect(state, 'laserHit', targetPoint.x, targetPoint.y, owner.color);
     }
-    state.events.push({ type: def.kind === 'laser' ? 'laser' : def.kind === 'flame' ? 'flame' : 'shoot', player: owner.isPlayer });
+    state.events.push({ type: def.kind === 'laser' ? 'laser' : def.kind === 'flame' ? 'flame' : def.kind === 'missile' ? 'missile' : 'shoot', player: owner.isPlayer });
+  }
+
+
+  function createProjectile(owner, origin, angle, speed, damage, ttl, color, kind, extra = {}) {
+    return { id: `projectile-${nextProjectileId++}`, ownerId: owner.id, x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, angle, damage, ttl, color, kind, ...extra };
+  }
+
+  function fireShotgun(state, owner, origin, targetPoint, def, damage) {
+    const baseAngle = angleTo(origin, targetPoint);
+    const pelletCount = Math.min(8, def.pellets + owner.mods.shotgunBonus);
+    for (let i = 0; i < pelletCount; i += 1) {
+      const ratio = pelletCount === 1 ? 0 : i / (pelletCount - 1) - 0.5;
+      const angle = baseAngle + ratio * def.spread;
+      state.projectiles.push(createProjectile(owner, origin, angle, def.projectileSpeed, damage, 0.45, owner.color, 'shotgun'));
+    }
+  }
+
+  function fireMissile(state, owner, origin, target, targetPoint, def, damage) {
+    const angle = angleTo(origin, targetPoint);
+    state.projectiles.push(createProjectile(owner, origin, angle, def.projectileSpeed, damage, def.ttl, owner.color, 'missile', {
+      target, turnRate: def.turnRate, explosionRadius: def.explosionRadius, splashDamage: def.splashDamage,
+    }));
   }
 
   function updateProjectiles(state, dt) {
     for (let index = state.projectiles.length - 1; index >= 0; index -= 1) {
       const projectile = state.projectiles[index];
+      const owner = state.snakes.find((snake) => snake.id === projectile.ownerId);
+      if (projectile.kind === 'missile') steerMissile(state, projectile, dt);
       projectile.x = wrap(projectile.x + projectile.vx * dt);
       projectile.y = wrap(projectile.y + projectile.vy * dt);
       projectile.ttl -= dt;
-      if (projectile.ttl <= 0) {
+      if (projectile.kind === 'missile') addEffect(state, 'smoke', projectile.x, projectile.y, 'rgba(220,220,220,0.55)');
+      if (hitsObstacle(state, projectile)) {
+        explodeProjectile(state, projectile, owner);
         state.projectiles.splice(index, 1);
         continue;
       }
-      const owner = state.snakes.find((snake) => snake.id === projectile.ownerId);
+      if (projectile.ttl <= 0) {
+        if (projectile.kind === 'missile') explodeProjectile(state, projectile, owner);
+        state.projectiles.splice(index, 1);
+        continue;
+      }
       const bossHit = !projectile.boss && findBossProjectileHit(state, projectile);
       if (bossHit) {
+        if (projectile.kind === 'missile') explodeProjectile(state, projectile, owner);
         damageBoss(state, bossHit, projectile.damage, owner);
+        addEffect(state, projectile.kind === 'shotgun' ? 'sparkBig' : 'spark', projectile.x, projectile.y, projectile.color);
         state.events.push({ type: 'hit', player: owner?.isPlayer });
         state.projectiles.splice(index, 1);
         continue;
       }
       const hit = findProjectileHit(state, projectile, owner);
       if (hit) {
-        applyDamage(state, hit.snake, hit.segmentIndex, projectile.damage, owner);
-        state.events.push({ type: 'hit', player: owner?.isPlayer });
+        if (projectile.kind === 'missile') explodeProjectile(state, projectile, owner);
+        else {
+          applyDamage(state, hit.snake, hit.segmentIndex, projectile.damage, owner, projectile.kind);
+          addEffect(state, projectile.kind === 'shotgun' ? 'sparkBig' : 'spark', projectile.x, projectile.y, projectile.color);
+          state.events.push({ type: 'hit', player: owner?.isPlayer });
+        }
         state.projectiles.splice(index, 1);
       }
     }
@@ -580,7 +705,7 @@
     return null;
   }
 
-  function applyDamage(state, snake, segmentIndex, rawDamage, sourceSnake) {
+  function applyDamage(state, snake, segmentIndex, rawDamage, sourceSnake, damageKind = "hit") {
     const segment = snake.segments[segmentIndex];
     if (!segment || !snake.alive || snake.effects.invincible > 0) return;
     const shieldReduction = segment.shield ? 0.6 : 0;
@@ -589,13 +714,16 @@
     if (damage <= 0) return;
     segment.hp = Math.max(0, segment.hp - damage);
     segment.lastDamageAt = state.elapsed;
-    state.events.push({ type: segment.shield ? 'shieldHit' : 'hit', player: snake.isPlayer });
+    segment.flash = 0.18;
+    state.events.push({ type: segment.shield ? 'shieldHit' : 'hit', player: snake.isPlayer, kind: damageKind });
     if (segmentIndex === 0) {
       snake.headDamaged = segment.hp <= 0;
+      if (segment.hp <= 0 && snake.segments.length <= 1) killSnake(state, snake, sourceSnake, 'headDestroyed');
       return;
     }
     if (segment.hp > 0) return;
-    state.events.push({ type: 'pop', player: snake.isPlayer });
+    state.events.push({ type: 'pop', player: snake.isPlayer, lostTurret: Boolean(segment.turret), lostShield: Boolean(segment.shield) });
+    addEffect(state, 'pop', getSnakeSegments(snake)[segmentIndex]?.x || snake.x, getSnakeSegments(snake)[segmentIndex]?.y || snake.y, snake.color);
     snake.segments.splice(segmentIndex, 1);
     if (snake.segments.length === 0) killSnake(state, snake, sourceSnake);
     installPendingTurrets(snake);
@@ -619,7 +747,7 @@
     hits.sort((a, b) => a.distance - b.distance).slice(0, def.maxHits).forEach((hit) => {
       const segment = hit.snake.segments[hit.segmentIndex];
       if (!segment) return;
-      applyDamage(state, hit.snake, hit.segmentIndex, damage, owner);
+      applyDamage(state, hit.snake, hit.segmentIndex, damage, owner, 'flame');
       segment.burn = Math.max(segment.burn || 0, def.burnDuration);
       segment.burnTick = 0;
     });
@@ -666,6 +794,11 @@
     return Math.floor(C.XP_BASE_PER_LEVEL * Math.pow(C.XP_LEVEL_GROWTH, Math.max(0, snake.level - 1)));
   }
 
+  function getSizeScale(snake) {
+    const level = Math.max(0, snake.level - 1);
+    return Math.min(C.SIZE_SCALE_CAP, 1 + 0.12 * level + 0.015 * level * level);
+  }
+
   function resolveCollisions(state) {
     for (const snake of state.snakes) {
       if (!snake.alive) continue;
@@ -685,15 +818,16 @@
     }
   }
 
-  function killSnake(state, snake, killer) {
+  function killSnake(state, snake, killer, reason = 'death') {
     if (!snake.alive) return;
     snake.alive = false;
     if (killer && killer.id !== snake.id) {
       killer.kills += 1;
+      if (killer.isPlayer) state.events.push({ type: 'playerKill', player: true });
       if (!killer.isPlayer) state.stats.enemyKills += 1;
     }
     dropXpFromSnake(state, snake);
-    state.events.push({ type: snake.isPlayer ? 'playerDeath' : 'enemyDeath' });
+    state.events.push({ type: snake.isPlayer ? 'playerDeath' : 'enemyDeath', reason, player: snake.isPlayer });
     if (snake.isPlayer) endGame(state, 'defeat');
   }
 
@@ -706,11 +840,10 @@
   }
 
   function dropXpFromSnake(state, snake) {
-    const total = 30 + snake.level * 10 + snake.segments.length * 3 + countTurrets(snake) * 15 + snake.kills * 20;
-    let remaining = total;
+    let remaining = Math.max(15, Math.floor(getNextLevelExp(snake) * 0.5));
     for (const [type, value] of [['xp50', 50], ['xp20', 20], ['xp10', 10], ['xp5', 5], ['xp1', 1]]) {
-      while (remaining >= value && Math.random() < 0.75) {
-        state.beans.push(createBeanNear(snake.x, snake.y, type, 250));
+      while (remaining >= value) {
+        state.beans.push(createBeanNear(snake.x, snake.y, type, randomRange(120, 250)));
         remaining -= value;
       }
     }
@@ -773,13 +906,16 @@
       }
       const inPoison = getSnakeSegments(snake).some((segment) => state.poisonZones.some((zone) => distance(segment, zone) < zone.radius));
       snake.inPoison = inPoison;
+      if (snake.isPlayer && inPoison && !snake.wasInPoison) state.events.push({ type: 'poisonEnter', player: true });
+      if (snake.isPlayer && !inPoison && snake.wasInPoison) state.events.push({ type: 'poisonLeave', player: true });
+      snake.wasInPoison = inPoison;
       if (!inPoison) {
         snake.poisonTimer = 0;
         continue;
       }
       snake.poisonTimer += dt;
       const tailIndex = snake.segments.length - 1;
-      if (tailIndex >= 0) applyDamage(state, snake, tailIndex, C.POISON_DAMAGE_PER_SECOND * dt, null);
+      if (tailIndex >= 0) applyDamage(state, snake, tailIndex, C.POISON_DAMAGE_PER_SECOND * dt, null, 'poison');
       if (snake.poisonTimer > 0.5) {
         state.events.push({ type: 'poison', player: snake.isPlayer });
         snake.poisonTimer = 0;
@@ -802,6 +938,13 @@
       boss.attackTimer -= dt;
       boss.ringTimer -= dt;
       boss.spitTimer -= dt;
+      boss.aoeTimer -= dt;
+      if (boss.aoeWarning > 0) boss.aoeWarning = Math.max(0, boss.aoeWarning - dt);
+      if (boss.aoeTimer <= C.BOSS_CONFIG.aoeWarningSeconds && boss.aoeWarning <= 0) {
+        boss.aoeWarning = C.BOSS_CONFIG.aoeWarningSeconds;
+        state.bossWarnings.push({ bossId: boss.id, x: boss.x, y: boss.y, radius: C.BOSS_CONFIG.aoeRadius, timer: C.BOSS_CONFIG.aoeWarningSeconds, duration: C.BOSS_CONFIG.aoeWarningSeconds });
+        if (isPlayerNear(state, boss, C.BOSS_CONFIG.aoeRadius + 80)) state.events.push({ type: 'bossWarn', player: true });
+      }
       if (target && boss.attackTimer <= 0) {
         fireBossBullet(state, boss, target, C.BOSS_CONFIG.bulletDamage, C.BOSS_CONFIG.bulletSpeed);
         boss.attackTimer = C.BOSS_CONFIG.attackInterval;
@@ -817,7 +960,39 @@
         spitBossXp(state, boss);
         boss.spitTimer = C.BOSS_CONFIG.spitInterval;
       }
+      if (boss.aoeTimer <= 0) {
+        resolveBossAoe(state, boss);
+        boss.aoeTimer = C.BOSS_CONFIG.aoeInterval;
+        boss.aoeWarning = 0;
+      }
     }
+  }
+
+
+  function updateBossWarnings(state, dt) {
+    for (let index = state.bossWarnings.length - 1; index >= 0; index -= 1) {
+      state.bossWarnings[index].timer -= dt;
+      if (state.bossWarnings[index].timer <= 0) state.bossWarnings.splice(index, 1);
+    }
+  }
+
+  function resolveBossAoe(state, boss) {
+    addEffect(state, 'bossAoe', boss.x, boss.y, '#ff3b3b', C.BOSS_CONFIG.aoeRadius);
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.effects.invincible > 0) continue;
+      const points = getSnakeSegments(snake);
+      for (let i = 0; i < points.length; i += 1) {
+        if (distance(points[i], boss) <= C.BOSS_CONFIG.aoeRadius && !lineBlockedByObstacle(state, boss, points[i])) {
+          applyDamage(state, snake, i, snake.segments[i].maxHp * C.BOSS_CONFIG.aoeDamageRatio, null, 'bossAoe');
+          if (snake.isPlayer) state.events.push({ type: 'bossAoeHit', player: true });
+        }
+      }
+    }
+  }
+
+  function isPlayerNear(state, point, range) {
+    const player = getPlayer(state);
+    return Boolean(player?.alive && distance(player, point) <= range);
   }
 
   function findNearestSnake(state, point, range) {
@@ -883,7 +1058,62 @@
   }
 
   function getSnakeRadius(snake) {
-    return C.SNAKE_RADIUS * (snake.effects.giant > 0 ? 3 : 1);
+    return C.SNAKE_RADIUS * Math.min(C.SIZE_SCALE_CAP, getSizeScale(snake) * (snake.effects.giant > 0 ? 3 : 1));
+  }
+
+
+  function steerMissile(state, projectile, dt) {
+    const targetPoint = resolveProjectileTarget(state, projectile.target);
+    if (!targetPoint) return;
+    const desired = angleTo(projectile, targetPoint);
+    const current = Math.atan2(projectile.vy, projectile.vx);
+    const next = turnToward(current, desired, projectile.turnRate * dt);
+    const speed = Math.hypot(projectile.vx, projectile.vy);
+    projectile.vx = Math.cos(next) * speed;
+    projectile.vy = Math.sin(next) * speed;
+    projectile.angle = next;
+  }
+
+  function resolveProjectileTarget(state, target) {
+    if (!target) return null;
+    if (target.bossId) return state.bosses.find((boss) => boss.id === target.bossId && boss.alive) || null;
+    const snake = state.snakes.find((item) => item.id === target.snakeId && item.alive);
+    return snake ? getSnakeSegments(snake)[target.segmentIndex] : null;
+  }
+
+  function explodeProjectile(state, projectile, owner) {
+    addEffect(state, 'explosion', projectile.x, projectile.y, projectile.color, projectile.explosionRadius || 40);
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.id === owner?.id) continue;
+      const points = getSnakeSegments(snake);
+      for (let i = 0; i < points.length; i += 1) {
+        if (distance(projectile, points[i]) <= (projectile.explosionRadius || 0)) applyDamage(state, snake, i, i === 0 ? projectile.damage : projectile.splashDamage, owner, 'missile');
+      }
+    }
+  }
+
+  function hitsObstacle(state, point) {
+    return state.obstacles.some((obstacle) => distance(point, obstacle) <= obstacle.radius + 3);
+  }
+
+  function lineBlockedByObstacle(state, from, to) {
+    return state.obstacles.some((obstacle) => distancePointToSegment(obstacle, from, to) <= obstacle.radius);
+  }
+
+  function distancePointToSegment(point, a, b) {
+    const ax = 0;
+    const ay = 0;
+    const bx = shortestDelta(b.x, a.x);
+    const by = shortestDelta(b.y, a.y);
+    const px = shortestDelta(point.x, a.x);
+    const py = shortestDelta(point.y, a.y);
+    const lenSq = bx * bx + by * by || 1;
+    const t = clamp((px * bx + py * by) / lenSq, 0, 1);
+    return Math.hypot(px - (ax + bx * t), py - (ay + by * t));
+  }
+
+  function addEffect(state, type, x, y, color, radius = 16) {
+    state.effects.push({ type, x, y, color, radius, ttl: type === 'bossAoe' ? 0.38 : type === 'explosion' ? 0.45 : 0.22 });
   }
 
   function ensureSnakeCount(state) {
@@ -906,6 +1136,42 @@
         counts[type] += 1;
       }
     }
+    ensurePoisonRewards(state);
+  }
+
+  function ensurePoisonRewards(state) {
+    for (const zone of state.poisonZones) {
+      const inZone = state.beans.filter((bean) => distance(bean, zone) < zone.radius);
+      while (inZone.length < 90) {
+        const bean = createPoisonBean(zone);
+        state.beans.push(bean);
+        inZone.push(bean);
+      }
+      if (state.chests.filter((chest) => distance(chest, zone) < zone.radius * 0.45).length < 1 && Math.random() < 0.008) state.chests.push(createChestNear(zone.x, zone.y));
+      if (Math.random() < 0.0015) state.powerups.push(createPowerupNear(zone.x, zone.y, Math.random() < 0.5 ? 'invincible' : 'giant'));
+    }
+  }
+
+  function createPoisonBean(zone) {
+    const angle = randomRange(0, Math.PI * 2);
+    const radius = Math.sqrt(Math.random()) * zone.radius;
+    const ring = radius < zone.radius * 0.33 ? 'core' : radius < zone.radius * 0.66 ? 'mid' : 'outer';
+    const type = rollPoisonBeanType(ring);
+    return { id: `bean-${nextBeanId++}`, x: wrap(zone.x + Math.cos(angle) * radius), y: wrap(zone.y + Math.sin(angle) * radius), type };
+  }
+
+  function rollPoisonBeanType(ring) {
+    const weights = {
+      outer: [['xp1', 50], ['xp5', 30], ['xp10', 15], ['xp20', 4.5], ['xp50', 0.5]],
+      mid: [['xp1', 25], ['xp5', 30], ['xp10', 25], ['xp20', 15], ['xp50', 5]],
+      core: [['xp1', 10], ['xp5', 15], ['xp10', 25], ['xp20', 30], ['xp50', 20]],
+    }[ring];
+    let roll = Math.random() * weights.reduce((sum, [, weight]) => sum + weight, 0);
+    for (const [type, weight] of weights) {
+      roll -= weight;
+      if (roll <= 0) return type;
+    }
+    return 'xp1';
   }
 
   function createBeanNear(x, y, type, spread) {
@@ -921,6 +1187,9 @@
   }
 
   function isPositionSafe(state, pos, minDistance) {
+    for (const obstacle of state.obstacles || []) {
+      if (distance(pos, obstacle) < obstacle.radius + minDistance * 0.4) return false;
+    }
     for (const snake of state.snakes) {
       if (!snake.alive) continue;
       if (distance(pos, snake) < minDistance) return false;
@@ -1019,6 +1288,7 @@
     createGame,
     endGame,
     getPlayer,
+    getSizeScale,
     getSnakeSegments,
     getNextLevelExp,
     getSummary,

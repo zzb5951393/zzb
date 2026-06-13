@@ -29,6 +29,13 @@
   const WIN_AREA_RATIO = 0.5;
   const POISON_DAMAGE_PER_SECOND = 6;
   const POISON_ZONE_COUNT = 3;
+  const SIZE_SCALE_CAP = 20;
+  const BOSS_AOE_WARNING_SECONDS = 2.5;
+  const BOSS_AOE_RADIUS = 220;
+  const BOSS_AOE_INTERVAL = 8;
+  const BOSS_AOE_DAMAGE_RATIO = 0.5;
+  const ICE_SLOW_MULTIPLIER = 0.6;
+  const ICE_LINGER_SECONDS = 3;
 
   const VIEWPORT_PRESETS = Object.freeze([
     { label: '自适应屏幕', width: 0, height: 0, adaptive: true },
@@ -74,15 +81,20 @@
     ringInterval: 8,
     ringCount: 12,
     ringDamage: 4,
+    aoeWarningSeconds: BOSS_AOE_WARNING_SECONDS,
+    aoeRadius: BOSS_AOE_RADIUS,
+    aoeInterval: BOSS_AOE_INTERVAL,
+    aoeDamageRatio: BOSS_AOE_DAMAGE_RATIO,
     spitInterval: 2.5,
     respawnSeconds: 120,
   });
 
   const TURRET_TYPES = Object.freeze({
     machine: { label: '机枪塔', rarity: 'common', range: 500, fireRate: 2, damage: 3, color: '#ffe36e', kind: 'projectile', projectileSpeed: 760 },
-    shotgun: { label: '散弹枪塔', rarity: 'rare', range: 220, fireRate: 1, damage: 9, color: '#ff9a55', kind: 'instant' },
+    shotgun: { label: '散弹枪塔', rarity: 'rare', range: 220, fireRate: 1, damage: 3, color: '#ff9a55', kind: 'shotgun', projectileSpeed: 620, pellets: 3, spread: Math.PI / 6 },
     flame: { label: '火焰炮塔', rarity: 'rare', range: 300, fireRate: 1, damage: 2, color: '#ff6b2f', kind: 'flame', coneAngle: Math.PI / 3, maxHits: 6, burnDuration: 5, burnDps: 1 },
     laser: { label: '激光塔', rarity: 'legendary', range: 350, fireRate: 4, damage: 1.8, color: '#ff5cf4', kind: 'laser', unique: true },
+    missile: { label: '导弹塔', rarity: 'epic', range: 650, fireRate: 0.4, damage: 8, splashDamage: 4, explosionRadius: 80, color: '#ffcf5c', kind: 'missile', projectileSpeed: 180, turnRate: 2.1, ttl: 4 },
   });
 
   const RARITY_WEIGHTS = Object.freeze({ common: 60, rare: 25, epic: 12, legendary: 3 });
@@ -99,9 +111,15 @@
     BOOST_MAX_SECONDS,
     BOOST_REGEN_PER_SECOND,
     BOSS_CONFIG,
+    BOSS_AOE_DAMAGE_RATIO,
+    BOSS_AOE_INTERVAL,
+    BOSS_AOE_RADIUS,
+    BOSS_AOE_WARNING_SECONDS,
     BOOST_SPEED,
     HEAD_DAMAGED_SPEED_MULTIPLIER,
     HEAD_RECOVERY_RATIO,
+    ICE_LINGER_SECONDS,
+    ICE_SLOW_MULTIPLIER,
     INITIAL_SEGMENTS,
     MAP_THEMES,
     MAX_TURRETS,
@@ -117,6 +135,7 @@
     REGEN_DELAY_SECONDS,
     SEGMENT_HP,
     SEGMENT_SPACING,
+    SIZE_SCALE_CAP,
     SNAKE_RADIUS,
     STORAGE_KEY,
     TARGET_SNAKE_COUNT,

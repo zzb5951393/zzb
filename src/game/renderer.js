@@ -20,11 +20,15 @@
     render(state, viewport) {
       this.drawBackground(state, viewport);
       this.drawPoisonZones(state, viewport);
+      this.drawIceZones(state, viewport);
+      this.drawObstacles(state, viewport);
+      this.drawBossWarnings(state, viewport);
       this.drawBosses(state, viewport);
       this.drawRewards(state, viewport);
       this.drawBeans(state, viewport);
       this.drawProjectiles(state, viewport);
       this.drawLasers(state, viewport);
+      this.drawEffects(state, viewport);
       this.drawSnakes(state, viewport);
       this.drawEdgeHints(state, viewport);
     }
@@ -87,6 +91,69 @@
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, zone.radius, 0, Math.PI * 2);
         this.ctx.fill();
+      }
+    }
+
+
+    drawIceZones(state, viewport) {
+      for (const zone of state.iceZones || []) {
+        const p = this.worldToScreen(zone, state, viewport);
+        if (!isVisible(p, zone.radius + 20, viewport)) continue;
+        this.ctx.fillStyle = 'rgba(132, 224, 255, 0.2)';
+        this.ctx.strokeStyle = 'rgba(210, 247, 255, 0.55)';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, zone.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+        for (let i = 0; i < 10; i += 1) {
+          const a = i * 0.91;
+          this.ctx.beginPath();
+          this.ctx.moveTo(p.x + Math.cos(a) * zone.radius * 0.25, p.y + Math.sin(a) * zone.radius * 0.25);
+          this.ctx.lineTo(p.x + Math.cos(a) * zone.radius * 0.9, p.y + Math.sin(a) * zone.radius * 0.9);
+          this.ctx.stroke();
+        }
+      }
+    }
+
+    drawObstacles(state, viewport) {
+      for (const obstacle of state.obstacles || []) {
+        const p = this.worldToScreen(obstacle, state, viewport);
+        if (!isVisible(p, obstacle.radius + 20, viewport)) continue;
+        const gradient = this.ctx.createRadialGradient(p.x - obstacle.radius * 0.3, p.y - obstacle.radius * 0.3, 4, p.x, p.y, obstacle.radius);
+        if (obstacle.kind === 'ice') {
+          gradient.addColorStop(0, '#e2fbff');
+          gradient.addColorStop(1, '#75c9df');
+        } else if (obstacle.kind === 'stump') {
+          gradient.addColorStop(0, '#c68b4a');
+          gradient.addColorStop(1, '#6e3f20');
+        } else {
+          gradient.addColorStop(0, '#b8bdc3');
+          gradient.addColorStop(1, '#59616b');
+        }
+        this.ctx.fillStyle = gradient;
+        this.ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.ellipse(p.x, p.y, obstacle.radius * 1.1, obstacle.radius * 0.85, obstacle.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+      }
+    }
+
+    drawBossWarnings(state, viewport) {
+      for (const warning of state.bossWarnings || []) {
+        const p = this.worldToScreen(warning, state, viewport);
+        if (!isVisible(p, warning.radius + 20, viewport)) continue;
+        const progress = warning.timer / warning.duration;
+        const pulse = Math.sin(performance.now() / (progress < 0.2 ? 55 : 120)) * 0.18 + 0.34;
+        this.ctx.fillStyle = `rgba(255, 37, 37, ${pulse})`;
+        this.ctx.strokeStyle = 'rgba(255, 20, 20, 0.95)';
+        this.ctx.lineWidth = 4;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, warning.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
       }
     }
 
@@ -167,11 +234,37 @@
     drawProjectiles(state, viewport) {
       for (const projectile of state.projectiles) {
         const p = this.worldToScreen(projectile, state, viewport);
-        if (!isVisible(p, 20, viewport)) continue;
-        this.ctx.fillStyle = projectile.color;
-        this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-        this.ctx.fill();
+        if (!isVisible(p, 30, viewport)) continue;
+        this.ctx.save();
+        if (projectile.kind === 'missile') {
+          this.ctx.translate(p.x, p.y);
+          this.ctx.rotate(projectile.angle || Math.atan2(projectile.vy, projectile.vx));
+          this.ctx.fillStyle = projectile.color;
+          this.ctx.beginPath();
+          this.ctx.moveTo(9, 0);
+          this.ctx.lineTo(-7, -5);
+          this.ctx.lineTo(-4, 0);
+          this.ctx.lineTo(-7, 5);
+          this.ctx.closePath();
+          this.ctx.fill();
+          this.ctx.fillStyle = 'rgba(255,90,30,0.85)';
+          this.ctx.beginPath();
+          this.ctx.arc(-10, 0, 4, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else if (projectile.kind === 'shotgun') {
+          this.ctx.fillStyle = projectile.color;
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else {
+          this.ctx.strokeStyle = projectile.color;
+          this.ctx.lineWidth = 3;
+          this.ctx.beginPath();
+          this.ctx.moveTo(p.x - Math.cos(projectile.angle || 0) * 7, p.y - Math.sin(projectile.angle || 0) * 7);
+          this.ctx.lineTo(p.x + Math.cos(projectile.angle || 0) * 7, p.y + Math.sin(projectile.angle || 0) * 7);
+          this.ctx.stroke();
+        }
+        this.ctx.restore();
       }
     }
 
@@ -179,12 +272,32 @@
       for (const laser of state.lasers) {
         const from = this.worldToScreen(laser.from, state, viewport);
         const to = this.worldToScreen(laser.to, state, viewport);
-        this.ctx.strokeStyle = laser.kind === 'laser' ? 'rgba(255,92,244,0.8)' : 'rgba(255,160,80,0.75)';
-        this.ctx.lineWidth = laser.kind === 'laser' ? 3 : 5;
-        this.ctx.beginPath();
-        this.ctx.moveTo(from.x, from.y);
-        this.ctx.lineTo(to.x, to.y);
-        this.ctx.stroke();
+        if (laser.kind === 'flame') {
+          const angle = Math.atan2(to.y - from.y, to.x - from.x);
+          const grad = this.ctx.createRadialGradient(from.x, from.y, 8, to.x, to.y, 110);
+          grad.addColorStop(0, 'rgba(255,220,80,0.55)');
+          grad.addColorStop(0.55, 'rgba(255,92,24,0.34)');
+          grad.addColorStop(1, 'rgba(255,40,0,0)');
+          this.ctx.fillStyle = grad;
+          this.ctx.beginPath();
+          this.ctx.moveTo(from.x, from.y);
+          this.ctx.arc(from.x, from.y, 120, angle - Math.PI / 6, angle + Math.PI / 6);
+          this.ctx.closePath();
+          this.ctx.fill();
+        } else {
+          this.ctx.strokeStyle = laser.kind === 'laser' ? hexToRgba(laser.color, 0.28) : 'rgba(255,160,80,0.4)';
+          this.ctx.lineWidth = laser.kind === 'laser' ? 11 : 6;
+          this.ctx.beginPath();
+          this.ctx.moveTo(from.x, from.y);
+          this.ctx.lineTo(to.x, to.y);
+          this.ctx.stroke();
+          this.ctx.strokeStyle = laser.kind === 'laser' ? laser.color : 'rgba(255,220,120,0.9)';
+          this.ctx.lineWidth = laser.kind === 'laser' ? 2.5 : 3;
+          this.ctx.beginPath();
+          this.ctx.moveTo(from.x, from.y);
+          this.ctx.lineTo(to.x, to.y);
+          this.ctx.stroke();
+        }
       }
     }
 
@@ -203,14 +316,19 @@
         const p = this.worldToScreen(segment, state, viewport);
         if (!isVisible(p, C.SNAKE_RADIUS + 20, viewport)) continue;
         const isHead = index === 0;
-        const baseRadius = C.SNAKE_RADIUS * (snake.effects.giant > 0 ? 3 : 1);
+        const baseRadius = C.SNAKE_RADIUS * Math.min(C.SIZE_SCALE_CAP, S.getSizeScale(snake) * (snake.effects.giant > 0 ? 3 : 1));
         const segmentState = snake.segments[index];
         const equipmentScale = segmentState?.turret && segmentState?.shield ? 1.2 : segmentState?.turret ? 1.18 : segmentState?.shield ? 1.15 : 1;
         const radius = (isHead ? baseRadius * 1.22 : baseRadius) * equipmentScale;
-        this.ctx.fillStyle = snake.color;
+        this.ctx.fillStyle = segmentState?.flash > 0 ? '#fff7ef' : snake.color;
+        if (snake.chilledTimer > 0) {
+          this.ctx.shadowColor = '#b8f3ff';
+          this.ctx.shadowBlur = 8;
+        }
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
         this.ctx.fill();
+        this.ctx.shadowBlur = 0;
         if (segmentState?.shield) this.drawShield(p, radius);
         if (segmentState) this.drawHpRing(p, radius, segmentState.hp / segmentState.maxHp, snake.isPlayer || isNearPlayer(state, snake));
         if (segmentState?.burn > 0) this.drawBurning(p, radius);
@@ -335,6 +453,32 @@
       }
     }
 
+
+    drawEffects(state, viewport) {
+      for (const effect of state.effects || []) {
+        const p = this.worldToScreen(effect, state, viewport);
+        if (!isVisible(p, effect.radius + 30, viewport)) continue;
+        const alpha = Math.max(0, effect.ttl / 0.45);
+        if (effect.type === 'smoke') {
+          this.ctx.fillStyle = effect.color;
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, 5 + (1 - alpha) * 10, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else if (effect.type === 'explosion' || effect.type === 'bossAoe') {
+          this.ctx.strokeStyle = hexToRgba(effect.color || '#ff6b2f', Math.max(0.2, alpha));
+          this.ctx.lineWidth = effect.type === 'bossAoe' ? 8 : 4;
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, effect.radius * (1.15 - alpha * 0.2), 0, Math.PI * 2);
+          this.ctx.stroke();
+        } else {
+          this.ctx.fillStyle = effect.color || '#fff';
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, effect.type === 'sparkBig' ? 11 : 6, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
+      }
+    }
+
     drawEdgeHints(state, viewport) {
       const player = S.getPlayer(state);
       if (!player) return;
@@ -377,6 +521,14 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function hexToRgba(hex, alpha) {
+    if (!hex || !hex.startsWith('#') || hex.length !== 7) return `rgba(255,255,255,${alpha})`;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
   }
 
   window.ExplorerSnakeRenderer = Object.freeze({ Renderer });

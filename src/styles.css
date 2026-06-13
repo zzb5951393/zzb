@@ -129,3 +129,29 @@ canvas {
 .card-rarity.epic { color: #e2b4ff; }
 .card-rarity.legendary { color: #ffe28a; }
 @media (max-width: 980px) { .hud { grid-template-columns: repeat(3, 1fr); } .card-options { grid-template-columns: 1fr; } }
+
+.combat-feed {
+  position: fixed;
+  top: calc(max(0.75rem, env(safe-area-inset-top)) + 5.2rem);
+  left: 1rem;
+  display: grid;
+  gap: 0.45rem;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+  z-index: 6;
+}
+.feed-item {
+  padding: 0.55rem 0.75rem;
+  border-left: 4px solid #76f28a;
+  border-radius: 0.85rem;
+  background: rgba(5, 19, 10, 0.72);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.25);
+  color: #f4fff2;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+  animation: feedIn 160ms ease-out;
+}
+.feed-item.danger { border-left-color: #ff5c5c; }
+.feed-item.reward { border-left-color: #ffd45c; }
+@keyframes feedIn { from { opacity: 0; transform: translateX(-0.7rem); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 760px) { .combat-feed { top: auto; bottom: 4.5rem; } }
