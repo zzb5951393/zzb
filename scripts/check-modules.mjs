@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 function collectJavaScriptFiles(dir) {
@@ -22,9 +22,4 @@ for (const file of moduleFiles) {
   execFileSync(process.execPath, ['--check', file], { stdio: 'inherit' });
 }
 
-const spritePath = 'public/assets/snake-sprites.svg';
-if (!existsSync(spritePath) || statSync(spritePath).size === 0) {
-  throw new Error(`${spritePath} is missing or empty`);
-}
-
-console.log(`Checked ${moduleFiles.length} JavaScript modules and ${spritePath}.`);
+console.log(`Checked ${moduleFiles.length} JavaScript modules.`);

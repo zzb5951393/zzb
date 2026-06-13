@@ -4,6 +4,10 @@
 
 ## 本地运行
 
+最简单的试玩方式：解压项目后直接双击 `index.html`，浏览器会打开游戏页面。
+
+如果你后面要频繁修改代码，推荐用本地服务器运行：
+
 ```bash
 python3 -m http.server 5173
 ```
@@ -33,17 +37,20 @@ src/styles.css                # 响应式布局、移动端触控按钮、游戏
 src/game/config.js            # 棋盘尺寸、速度、得分、素材坐标等配置
 src/game/state.js             # 纯游戏状态与规则推进，后续规则主要改这里
 src/game/input.js             # 键盘、WASD、触控滑动、方向按钮输入适配
-src/game/renderer.js          # Canvas 渲染层，负责绘制棋盘、蛇和食物
-public/assets/snake-sprites.svg # 第一版自生成像素风蛇头、身体和食物素材
-scripts/check-modules.mjs     # 本地语法与素材存在性检查
+src/game/renderer.js          # Canvas 渲染层，使用代码绘制棋盘、蛇和食物
+scripts/check-modules.mjs     # 本地 JS 语法检查
 ```
 
 ### 为什么这样拆分
 
 - **规则和渲染分离**：`state.js` 只处理游戏数据和规则，`renderer.js` 只负责画面。后续如果要换成 SVG、WebGL 或新的美术资源，不会影响核心规则。
 - **输入适配独立**：`input.js` 把键盘、手机滑动和按钮都统一成方向事件。后续可以增加虚拟摇杆、手柄或自动寻路调试输入。
-- **配置集中**：棋盘大小、速度、分数、素材雪碧图坐标都在 `config.js`，方便快速调参。
-- **本地优先**：当前只用浏览器原生能力和 Python 静态服务器，方便先验证玩法；以后如果需要排行榜、账号、关卡配置或 PWA 离线缓存，可以在现有结构上继续加。
+- **配置集中**：棋盘大小、速度、分数等参数都在 `config.js`，方便快速调参。
+- **本地优先**：当前只用浏览器原生能力和 Python 静态服务器，蛇、食物、背景都由 HTML/CSS/Canvas 代码绘制，不依赖 png/jpg/mp3 等二进制资源；以后如果需要排行榜、账号、关卡配置或 PWA 离线缓存，可以在现有结构上继续加。
+
+## GitHub PR 合并冲突
+
+如果 GitHub 显示 `This branch has conflicts that must be resolved`，不要直接在网页里手动改核心游戏文件。推荐关闭旧的冲突 PR，使用最新重新创建的干净 PR。更详细的说明见 [`docs/github-pr-troubleshooting.md`](./docs/github-pr-troubleshooting.md)。
 
 ## 后续需要你补充的信息
 
