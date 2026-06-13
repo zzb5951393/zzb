@@ -56,9 +56,13 @@
       theme: options.theme || 'grass',
       elapsed: 0,
       continuedAfterWin: false,
-      stats: { enemyXp: 0, enemyKills: 0, enemyLevelUps: 0 },
+      stats: { enemyXp: 0, enemyKills: 0, enemyLevelUps: 0, bossKills: 0 },
       snakes: [player],
       beans: [],
+      chests: [],
+      powerups: [],
+      bosses: createBosses(),
+      poisonZones: createPoisonZones(),
       projectiles: [],
       lasers: [],
       camera: { x: player.x, y: player.y },
@@ -96,6 +100,8 @@
       aiTarget: null,
       magnetRange: isPlayer ? C.PLAYER_MAGNET_RANGE : C.AI_MAGNET_RANGE,
       pendingTurrets: [],
+      effects: { invincible: 0, giant: 0 },
+      poisonTimer: 0,
       mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0 },
       segments: Array.from({ length: C.INITIAL_SEGMENTS }, createSegment),
       trail: Array.from({ length: 24 }, (_, index) => ({ x: wrap(head.x - Math.cos(angle) * index * C.SEGMENT_SPACING), y: wrap(head.y - Math.sin(angle) * index * C.SEGMENT_SPACING) })),
@@ -106,6 +112,38 @@
     return { hp: C.SEGMENT_HP, maxHp: C.SEGMENT_HP, shield: false, turret: null };
   }
 
+
+  function createPoisonZones() {
+    return [
+      { x: 850, y: 980, radius: 320 },
+      { x: 3180, y: 1100, radius: 280 },
+      { x: 2200, y: 3180, radius: 360 },
+    ];
+  }
+
+  function createBosses() {
+    return [
+      createBoss('boss-1', 760, 3260),
+      createBoss('boss-2', 3260, 760),
+    ];
+  }
+
+  function createBoss(id, x, y) {
+    return {
+      id,
+      x,
+      y,
+      hp: C.BOSS_CONFIG.hp,
+      maxHp: C.BOSS_CONFIG.hp,
+      alive: true,
+      respawnTimer: 0,
+      attackTimer: randomRange(0.2, C.BOSS_CONFIG.attackInterval),
+      ringTimer: randomRange(2, C.BOSS_CONFIG.ringInterval),
+      spitTimer: randomRange(0.5, C.BOSS_CONFIG.spitInterval),
+      angle: 0,
+    };
+  }
+
   function stepGame(state, input, dt) {
     state.events = [];
     state.lasers = [];
@@ -114,9 +152,13 @@
     state.isBoostHeld = Boolean(input.isBoostHeld);
     updatePlayerAim(state, input);
     updateAiSnakes(state, dt);
+    updateEffects(state, dt);
     moveSnakes(state, dt);
     updateBeans(state, dt);
     collectBeans(state);
+    collectRewards(state);
+    updatePoison(state, dt);
+    updateBosses(state, dt);
     updateTurrets(state, dt);
     updateProjectiles(state, dt);
     resolveCollisions(state);
@@ -136,6 +178,18 @@
     const dy = (input.pointer.y ?? viewport.height / 2) - viewport.height / 2;
     state.mouseWorld = { x: wrap(player.x + dx), y: wrap(player.y + dy) };
     if (Math.hypot(dx, dy) > 8) player.targetAngle = Math.atan2(dy, dx);
+  }
+
+
+  function updateEffects(state, dt) {
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      if (snake.effects.invincible > 0) snake.effects.invincible = Math.max(0, snake.effects.invincible - dt);
+      if (snake.effects.giant > 0) {
+        snake.effects.giant = Math.max(0, snake.effects.giant - dt);
+        if (snake.effects.giant === 0) endGiant(snake);
+      }
+    }
   }
 
   function updateAiSnakes(state, dt) {
@@ -415,6 +469,10 @@
   }
 
   function isTargetValid(state, owner, target, origin, range) {
+    if (target.bossId) {
+      const boss = state.bosses.find((item) => item.id === target.bossId && item.alive);
+      return Boolean(boss) && distance(origin, boss) <= range;
+    }
     const targetSnake = state.snakes.find((snake) => snake.id === target.snakeId && snake.alive);
     if (!targetSnake) return false;
     const targetPoint = getSnakeSegments(targetSnake)[target.segmentIndex];
@@ -435,20 +493,29 @@
         }
       }
     }
+    for (const boss of state.bosses) {
+      if (!boss.alive) continue;
+      const d = distance(origin, boss);
+      if (d < range && d < bestDistance) {
+        bestDistance = d;
+        best = { bossId: boss.id };
+      }
+    }
     return best;
   }
 
   function fireTurret(state, owner, origin, turret, def) {
-    const targetSnake = state.snakes.find((snake) => snake.id === turret.target.snakeId && snake.alive);
-    if (!targetSnake) return;
-    const targetPoint = getSnakeSegments(targetSnake)[turret.target.segmentIndex];
+    const bossTarget = turret.target.bossId ? state.bosses.find((boss) => boss.id === turret.target.bossId && boss.alive) : null;
+    const targetSnake = turret.target.snakeId ? state.snakes.find((snake) => snake.id === turret.target.snakeId && snake.alive) : null;
+    const targetPoint = bossTarget || (targetSnake ? getSnakeSegments(targetSnake)[turret.target.segmentIndex] : null);
     if (!targetPoint) return;
-    const damage = def.damage * (1 + owner.mods.damageBonus);
+    const damage = def.damage * (1 + owner.mods.damageBonus) * (owner.effects.giant > 0 ? 2 : 1);
     if (def.kind === 'projectile') {
       const angle = angleTo(origin, targetPoint);
       state.projectiles.push({ id: `projectile-${nextProjectileId++}`, ownerId: owner.id, x: origin.x, y: origin.y, vx: Math.cos(angle) * def.projectileSpeed, vy: Math.sin(angle) * def.projectileSpeed, damage, ttl: 1.2, color: def.color });
     } else {
-      applyDamage(state, targetSnake, turret.target.segmentIndex, damage, owner);
+      if (bossTarget) damageBoss(state, bossTarget, damage, owner);
+      else applyDamage(state, targetSnake, turret.target.segmentIndex, damage, owner);
       state.lasers.push({ from: origin, to: targetPoint, color: def.color, ttl: 0.08, kind: def.kind });
     }
     state.events.push({ type: def.kind === 'laser' ? 'laser' : 'shoot', player: owner.isPlayer });
@@ -465,6 +532,13 @@
         continue;
       }
       const owner = state.snakes.find((snake) => snake.id === projectile.ownerId);
+      const bossHit = !projectile.boss && findBossProjectileHit(state, projectile);
+      if (bossHit) {
+        damageBoss(state, bossHit, projectile.damage, owner);
+        state.events.push({ type: 'hit', player: owner?.isPlayer });
+        state.projectiles.splice(index, 1);
+        continue;
+      }
       const hit = findProjectileHit(state, projectile, owner);
       if (hit) {
         applyDamage(state, hit.snake, hit.segmentIndex, projectile.damage, owner);
@@ -487,7 +561,7 @@
 
   function applyDamage(state, snake, segmentIndex, rawDamage, sourceSnake) {
     const segment = snake.segments[segmentIndex];
-    if (!segment || !snake.alive) return;
+    if (!segment || !snake.alive || snake.effects.invincible > 0) return;
     const shieldReduction = segment.shield ? 0.6 : 0;
     const armorReduction = clamp(snake.mods.armorBonus, 0, 0.75);
     const damage = rawDamage * (1 - shieldReduction) * (1 - armorReduction);
@@ -507,7 +581,8 @@
         if (!owner.alive || owner.id === snake.id) continue;
         const segments = getSnakeSegments(owner);
         for (let index = 1; index < segments.length; index += 1) {
-          if (distance(head, segments[index]) < C.SNAKE_RADIUS * 1.45) {
+          if (distance(head, segments[index]) < getSnakeRadius(snake) * 1.45) {
+            if (snake.effects.invincible > 0) continue;
             killSnake(state, snake, owner);
             break;
           }
@@ -546,6 +621,172 @@
         remaining -= value;
       }
     }
+  }
+
+
+  function collectRewards(state) {
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      for (let index = state.chests.length - 1; index >= 0; index -= 1) {
+        if (distance(snake, state.chests[index]) <= getSnakeRadius(snake) + 18) {
+          addXp(state, snake, 50);
+          if (Math.random() < 0.45) state.powerups.push(createPowerupNear(state.chests[index].x, state.chests[index].y, Math.random() < 0.5 ? 'invincible' : 'giant'));
+          state.chests.splice(index, 1);
+          state.events.push({ type: 'chest', player: snake.isPlayer });
+        }
+      }
+      for (let index = state.powerups.length - 1; index >= 0; index -= 1) {
+        const powerup = state.powerups[index];
+        if (distance(snake, powerup) <= getSnakeRadius(snake) + 16) {
+          applyPowerup(snake, powerup.type);
+          state.powerups.splice(index, 1);
+          state.events.push({ type: 'powerup', player: snake.isPlayer });
+        }
+      }
+    }
+  }
+
+  function applyPowerup(snake, type) {
+    if (type === 'invincible') snake.effects.invincible = C.POWERUP_TYPES.invincible.duration;
+    if (type === 'giant') startGiant(snake);
+  }
+
+  function startGiant(snake) {
+    if (snake.effects.giant <= 0) {
+      for (const segment of snake.segments) {
+        segment.maxHp *= 2;
+        segment.hp *= 2;
+      }
+    }
+    snake.effects.giant = C.POWERUP_TYPES.giant.duration;
+  }
+
+  function endGiant(snake) {
+    for (const segment of snake.segments) {
+      segment.maxHp = Math.max(C.SEGMENT_HP, segment.maxHp / 2);
+      segment.hp = Math.min(segment.hp, segment.maxHp);
+    }
+  }
+
+  function createPowerupNear(x, y, type) {
+    return { id: `powerup-${nextBeanId++}`, x: wrap(x + randomRange(-80, 80)), y: wrap(y + randomRange(-80, 80)), type };
+  }
+
+  function updatePoison(state, dt) {
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.effects.invincible > 0) continue;
+      const inPoison = getSnakeSegments(snake).some((segment) => state.poisonZones.some((zone) => distance(segment, zone) < zone.radius));
+      if (!inPoison) {
+        snake.poisonTimer = 0;
+        continue;
+      }
+      snake.poisonTimer += dt;
+      const tailIndex = snake.segments.length - 1;
+      if (tailIndex >= 0) applyDamage(state, snake, tailIndex, C.POISON_DAMAGE_PER_SECOND * dt, null);
+      if (snake.poisonTimer > 0.5) {
+        state.events.push({ type: 'poison', player: snake.isPlayer });
+        snake.poisonTimer = 0;
+      }
+    }
+  }
+
+  function updateBosses(state, dt) {
+    for (const boss of state.bosses) {
+      if (!boss.alive) {
+        boss.respawnTimer -= dt;
+        if (boss.respawnTimer <= 0) {
+          boss.alive = true;
+          boss.hp = boss.maxHp;
+        }
+        continue;
+      }
+      const target = findNearestSnake(state, boss, C.BOSS_CONFIG.range);
+      if (target) boss.angle = angleTo(boss, target);
+      boss.attackTimer -= dt;
+      boss.ringTimer -= dt;
+      boss.spitTimer -= dt;
+      if (target && boss.attackTimer <= 0) {
+        fireBossBullet(state, boss, target, C.BOSS_CONFIG.bulletDamage, C.BOSS_CONFIG.bulletSpeed);
+        boss.attackTimer = C.BOSS_CONFIG.attackInterval;
+      }
+      if (boss.ringTimer <= 0) {
+        for (let i = 0; i < C.BOSS_CONFIG.ringCount; i += 1) {
+          const angle = (Math.PI * 2 * i) / C.BOSS_CONFIG.ringCount;
+          fireBossBulletAtAngle(state, boss, angle, C.BOSS_CONFIG.ringDamage, C.BOSS_CONFIG.bulletSpeed * 0.85);
+        }
+        boss.ringTimer = C.BOSS_CONFIG.ringInterval;
+      }
+      if (boss.spitTimer <= 0) {
+        spitBossXp(state, boss);
+        boss.spitTimer = C.BOSS_CONFIG.spitInterval;
+      }
+    }
+  }
+
+  function findNearestSnake(state, point, range) {
+    let best = null;
+    let bestDistance = range;
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      const d = distance(point, snake);
+      if (d < bestDistance) {
+        best = snake;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+
+  function fireBossBullet(state, boss, target, damage, speed) {
+    fireBossBulletAtAngle(state, boss, angleTo(boss, target), damage, speed);
+  }
+
+  function fireBossBulletAtAngle(state, boss, angle, damage, speed) {
+    state.projectiles.push({ id: `projectile-${nextProjectileId++}`, boss: true, ownerId: boss.id, x: boss.x, y: boss.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, ttl: 3, color: '#b245ff' });
+    state.events.push({ type: 'bossShoot' });
+  }
+
+  function spitBossXp(state, boss) {
+    for (let i = 0; i < 8; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp1', 140));
+    for (let i = 0; i < 4; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp5', 130));
+    for (let i = 0; i < 2; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp10', 120));
+    if (Math.random() < 0.5) state.beans.push(createBeanNear(boss.x, boss.y, 'xp20', 120));
+    if (Math.random() < 0.1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp50', 120));
+  }
+
+  function damageBoss(state, boss, damage, sourceSnake) {
+    if (!boss.alive) return;
+    boss.hp -= damage;
+    state.events.push({ type: 'bossHit', player: sourceSnake?.isPlayer });
+    if (boss.hp > 0) return;
+    boss.alive = false;
+    boss.respawnTimer = C.BOSS_CONFIG.respawnSeconds;
+    if (sourceSnake?.isPlayer) state.stats.bossKills += 1;
+    dropBossRewards(state, boss);
+    state.events.push({ type: 'bossDeath' });
+  }
+
+  function dropBossRewards(state, boss) {
+    for (let i = 0; i < 30; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp1', 260));
+    for (let i = 0; i < 20; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp5', 250));
+    for (let i = 0; i < 12; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp10', 230));
+    for (let i = 0; i < 8; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp20', 220));
+    for (let i = 0; i < 4; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp50', 200));
+    state.chests.push(createChestNear(boss.x, boss.y), createChestNear(boss.x, boss.y));
+    if (Math.random() < 0.1) state.powerups.push(createPowerupNear(boss.x, boss.y, 'invincible'));
+    if (Math.random() < 0.1) state.powerups.push(createPowerupNear(boss.x, boss.y, 'giant'));
+  }
+
+  function createChestNear(x, y) {
+    return { id: `chest-${nextBeanId++}`, x: wrap(x + randomRange(-180, 180)), y: wrap(y + randomRange(-180, 180)) };
+  }
+
+  function findBossProjectileHit(state, projectile) {
+    return state.bosses.find((boss) => boss.alive && distance(projectile, boss) < 58);
+  }
+
+  function getSnakeRadius(snake) {
+    return C.SNAKE_RADIUS * (snake.effects.giant > 0 ? 3 : 1);
   }
 
   function ensureSnakeCount(state) {
@@ -665,6 +906,7 @@
       playerTurrets: player ? countTurrets(player) : 0,
       playerKills: player?.kills || 0,
       playerXp: player?.totalXp || 0,
+      bossKills: state.stats.bossKills,
       enemyXp: state.stats.enemyXp,
       enemyKills: state.stats.enemyKills,
       topXpName: topXp?.name || '无',

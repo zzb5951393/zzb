@@ -38,16 +38,21 @@ npm run start
 - 玩家达到胜利长度后显示胜利提示，可继续挑战或结算。
 - 玩家死亡或主动结束后显示结算：时间、等级、长度、炮塔、经验、击杀数等。
 
+- 地图中加入 3 个毒云区，蛇身体进入毒云后会从尾巴开始持续受伤。
+- 地图中加入 2 个固定毒蘑菇 Boss，Boss 会发射子弹、环形弹幕并周期性吐经验。
+- Boss 死亡会掉落大量经验、宝箱，并有概率掉落无敌或巨大化道具；Boss 会在一段时间后刷新。
+- 宝箱会给经验并可能额外生成稀有道具；无敌可短时间免疫伤害和碰撞死亡，巨大化会放大体型并提高伤害。
+
 ## 代码架构
 
 ```text
 index.html                    # 页面入口、主菜单、设置、HUD、结算弹窗
 src/main.js                   # 应用装配、菜单流程、主循环、HUD、结算
 src/styles.css                # 响应式布局、菜单、HUD、弹窗、游戏外观
-src/game/config.js            # 地图、速度、蛇数量、经验豆、卡牌、炮塔、AI 性格等配置
-src/game/state.js             # 连续坐标游戏状态、AI、经验、升级、卡牌、炮塔、碰撞规则
+src/game/config.js            # 地图、速度、蛇数量、经验豆、卡牌、炮塔、毒云、Boss 等配置
+src/game/state.js             # 连续坐标游戏状态、AI、经验、升级、卡牌、炮塔、毒云、Boss、道具规则
 src/game/input.js             # 鼠标、左键加速、触屏方向与加速输入
-src/game/renderer.js          # Canvas 渲染层，代码绘制背景、蛇、经验豆、炮塔、子弹、边缘提示
+src/game/renderer.js          # Canvas 渲染层，代码绘制背景、蛇、经验豆、炮塔、毒云、Boss、子弹、边缘提示
 scripts/check-modules.mjs     # 本地 JS 语法检查
 ```
 

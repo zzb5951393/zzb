@@ -19,6 +19,9 @@
 
     render(state, viewport) {
       this.drawBackground(state, viewport);
+      this.drawPoisonZones(state, viewport);
+      this.drawBosses(state, viewport);
+      this.drawRewards(state, viewport);
       this.drawBeans(state, viewport);
       this.drawProjectiles(state, viewport);
       this.drawLasers(state, viewport);
@@ -68,6 +71,78 @@
         ctx.ellipse(p.x, p.y, 10, 3, index, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
+      }
+    }
+
+
+    drawPoisonZones(state, viewport) {
+      for (const zone of state.poisonZones) {
+        const p = this.worldToScreen(zone, state, viewport);
+        if (!isVisible(p, zone.radius + 40, viewport)) continue;
+        const gradient = this.ctx.createRadialGradient(p.x, p.y, zone.radius * 0.25, p.x, p.y, zone.radius);
+        gradient.addColorStop(0, 'rgba(65, 26, 78, 0.48)');
+        gradient.addColorStop(0.65, 'rgba(55, 18, 68, 0.28)');
+        gradient.addColorStop(1, 'rgba(55, 18, 68, 0)');
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, zone.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
+    drawBosses(state, viewport) {
+      for (const boss of state.bosses) {
+        if (!boss.alive) continue;
+        const p = this.worldToScreen(boss, state, viewport);
+        if (!isVisible(p, 110, viewport)) continue;
+        this.ctx.fillStyle = 'rgba(88, 24, 112, 0.2)';
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 88, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#7b3f2f';
+        this.ctx.beginPath();
+        this.ctx.ellipse(p.x, p.y + 30, 24, 42, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#c84b73';
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 54, Math.PI, Math.PI * 2);
+        this.ctx.quadraticCurveTo(p.x + 62, p.y + 22, p.x, p.y + 30);
+        this.ctx.quadraticCurveTo(p.x - 62, p.y + 22, p.x - 54, p.y);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#ffd7e2';
+        for (let i = 0; i < 7; i += 1) {
+          const angle = i * 1.7;
+          this.ctx.beginPath();
+          this.ctx.arc(p.x + Math.cos(angle) * 28, p.y - 8 + Math.sin(angle) * 14, 6, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
+        this.ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        this.ctx.fillRect(p.x - 55, p.y - 78, 110, 8);
+        this.ctx.fillStyle = '#ff5c86';
+        this.ctx.fillRect(p.x - 55, p.y - 78, 110 * Math.max(0, boss.hp / boss.maxHp), 8);
+      }
+    }
+
+    drawRewards(state, viewport) {
+      for (const chest of state.chests) {
+        const p = this.worldToScreen(chest, state, viewport);
+        if (!isVisible(p, 24, viewport)) continue;
+        this.ctx.fillStyle = '#8d5a2b';
+        this.ctx.fillRect(p.x - 12, p.y - 9, 24, 18);
+        this.ctx.fillStyle = '#ffd45c';
+        this.ctx.fillRect(p.x - 12, p.y - 2, 24, 4);
+      }
+      for (const powerup of state.powerups) {
+        const type = C.POWERUP_TYPES[powerup.type];
+        const p = this.worldToScreen(powerup, state, viewport);
+        if (!isVisible(p, 30, viewport)) continue;
+        this.ctx.shadowColor = type.color;
+        this.ctx.shadowBlur = 18;
+        this.ctx.fillStyle = type.color;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.shadowBlur = 0;
       }
     }
 
@@ -128,7 +203,8 @@
         const p = this.worldToScreen(segment, state, viewport);
         if (!isVisible(p, C.SNAKE_RADIUS + 20, viewport)) continue;
         const isHead = index === 0;
-        const radius = isHead ? C.SNAKE_RADIUS * 1.22 : C.SNAKE_RADIUS;
+        const baseRadius = C.SNAKE_RADIUS * (snake.effects.giant > 0 ? 3 : 1);
+        const radius = isHead ? baseRadius * 1.22 : baseRadius;
         const segmentState = snake.segments[index];
         this.ctx.fillStyle = snake.color;
         this.ctx.beginPath();
@@ -137,6 +213,7 @@
         if (segmentState?.shield) this.drawShield(p, radius);
         if (segmentState?.turret) this.drawTurret(p, snake, radius, segmentState.turret.type);
         if (segmentState && segmentState.hp < segmentState.maxHp) this.drawHpRing(p, radius, segmentState.hp / segmentState.maxHp);
+        if (snake.effects.invincible > 0) this.drawInvincibleAura(p, radius);
 
         if (!snake.isPlayer && !isHead && index % 2 === 0) {
           this.ctx.fillStyle = 'rgba(255,255,255,0.32)';
@@ -151,6 +228,15 @@
       }
     }
 
+
+
+    drawInvincibleAura(p, radius) {
+      this.ctx.strokeStyle = 'rgba(255, 220, 70, 0.9)';
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 7, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
 
     drawTurret(p, snake, radius, type) {
       const def = C.TURRET_TYPES[type];

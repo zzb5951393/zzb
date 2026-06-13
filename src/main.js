@@ -27,6 +27,8 @@
     kills: document.querySelector('#kills-value'),
     time: document.querySelector('#time-value'),
     boostFill: document.querySelector('#boost-fill'),
+    status: document.querySelector('#status-value'),
+    bossFill: document.querySelector('#boss-fill'),
   };
 
   const renderer = new Renderer(canvas);
@@ -132,6 +134,9 @@
     ui.kills.textContent = String(player.kills);
     ui.time.textContent = formatTime(game.elapsed);
     ui.boostFill.style.width = `${Math.round(player.boostEnergy)}%`;
+    ui.status.textContent = player.effects.invincible > 0 ? '无敌' : player.effects.giant > 0 ? '巨大化' : '普通';
+    const nearestBoss = game.bosses.filter((boss) => boss.alive).sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
+    ui.bossFill.style.width = nearestBoss ? `${Math.round((nearestBoss.hp / nearestBoss.maxHp) * 100)}%` : '0%';
   }
 
   function showSummary(isVictory = false) {
@@ -152,6 +157,7 @@
       ['是否新纪录', isNewRecord ? '是' : '否'],
       ['玩家总经验', summary.playerXp],
       ['玩家击杀数', summary.playerKills],
+      ['Boss 击杀数', summary.bossKills],
       ['敌人总经验', summary.enemyXp],
       ['敌人总击杀数', summary.enemyKills],
       ['经验最多', summary.topXpName],
@@ -196,6 +202,10 @@
       if (event.type === 'hit') playTone(120, 0.025, 'sine');
       if (event.type === 'pop') playTone(90, 0.08, 'triangle');
       if (event.type === 'playerDeath') playTone(70, 0.35, 'sawtooth');
+      if (event.type === 'bossShoot') playTone(150, 0.04, 'sawtooth');
+      if (event.type === 'bossDeath') playTone(60, 0.5, 'triangle');
+      if (event.type === 'powerup') playTone(980, 0.16, 'triangle');
+      if (event.type === 'chest') playTone(620, 0.12, 'sine');
     }
   }
 

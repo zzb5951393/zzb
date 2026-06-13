@@ -116,7 +116,8 @@ canvas {
 }
 .checkbox-row { display: flex; align-items: center; gap: 0.55rem; }
 .settings-panel input[type='range'] { width: 100%; accent-color: #76f28a; }
-.hud { grid-template-columns: repeat(7, minmax(5.8rem, auto)); }
+.hud { grid-template-columns: repeat(9, minmax(5.8rem, auto)); }
+.boss-track i { background: linear-gradient(90deg, #ff5c86, #ffd45c); }
 .xp-track i { background: linear-gradient(90deg, #fff36b, #58d7ff); }
 .card-modal-card { width: min(56rem, calc(100vw - 2rem)); text-align: center; }
 .card-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.2rem; }

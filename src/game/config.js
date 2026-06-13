@@ -22,6 +22,8 @@
   const MAX_TURRETS = 10;
   const TURRET_TARGET_INTERVAL = 0.2;
   const WIN_AREA_RATIO = 0.5;
+  const POISON_DAMAGE_PER_SECOND = 6;
+  const POISON_ZONE_COUNT = 3;
 
   const VIEWPORT_PRESETS = Object.freeze([
     { label: '自适应屏幕', width: 0, height: 0, adaptive: true },
@@ -51,6 +53,26 @@
     { key: 'wanderer', label: '游荡型', color: '#a56eff' },
   ]);
 
+
+  const POWERUP_TYPES = Object.freeze({
+    invincible: { label: '无敌', duration: 10, color: '#ffd85c' },
+    giant: { label: '巨大化', duration: 15, color: '#ff7a45' },
+  });
+
+  const BOSS_CONFIG = Object.freeze({
+    count: 2,
+    hp: 1500,
+    range: 900,
+    bulletSpeed: 400,
+    bulletDamage: 6,
+    attackInterval: 1.2,
+    ringInterval: 8,
+    ringCount: 12,
+    ringDamage: 4,
+    spitInterval: 2.5,
+    respawnSeconds: 120,
+  });
+
   const TURRET_TYPES = Object.freeze({
     machine: { label: '机枪塔', rarity: 'common', range: 500, fireRate: 2, damage: 3, color: '#ffe36e', kind: 'projectile', projectileSpeed: 760 },
     shotgun: { label: '散弹枪塔', rarity: 'rare', range: 220, fireRate: 1, damage: 9, color: '#ff9a55', kind: 'instant' },
@@ -69,11 +91,15 @@
     BOOST_DRAIN_PER_SECOND,
     BOOST_MAX_SECONDS,
     BOOST_REGEN_PER_SECOND,
+    BOSS_CONFIG,
     BOOST_SPEED,
     INITIAL_SEGMENTS,
     MAP_THEMES,
     MAX_TURRETS,
     PERSONALITIES,
+    POISON_DAMAGE_PER_SECOND,
+    POISON_ZONE_COUNT,
+    POWERUP_TYPES,
     PLAYER_COLOR,
     PLAYER_MAGNET_RANGE,
     PLAYER_SPEED,
