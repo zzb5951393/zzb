@@ -11,12 +11,19 @@
   const viewportSelect = document.querySelector('#viewport-select');
   const themeSelect = document.querySelector('#theme-select');
   const modal = document.querySelector('#modal');
+  const cardModal = document.querySelector('#card-modal');
+  const cardOptions = document.querySelector('#card-options');
   const modalTitle = document.querySelector('#modal-title');
   const summaryList = document.querySelector('#summary-list');
   const continueButton = document.querySelector('#continue-button');
+  const soundToggle = document.querySelector('#sound-toggle');
+  const volumeRange = document.querySelector('#volume-range');
 
   const ui = {
+    level: document.querySelector('#level-value'),
+    xpFill: document.querySelector('#xp-fill'),
     length: document.querySelector('#length-value'),
+    turrets: document.querySelector('#turrets-value'),
     kills: document.querySelector('#kills-value'),
     time: document.querySelector('#time-value'),
     boostFill: document.querySelector('#boost-fill'),
@@ -29,6 +36,7 @@
   let game = null;
   let bestLength = Number.parseInt(localStorage.getItem(C.STORAGE_KEY) || '0', 10) || 0;
   let lastFrame = 0;
+  let audioContext = null;
 
   C.VIEWPORT_PRESETS.forEach((preset, index) => {
     const option = document.createElement('option');
@@ -71,6 +79,7 @@
     menuScreen.classList.add('is-hidden');
     settingsPanel.classList.add('is-hidden');
     modal.classList.add('is-hidden');
+    cardModal.classList.add('is-hidden');
     gameScreen.classList.remove('is-hidden');
     lastFrame = performance.now();
   }
@@ -95,8 +104,13 @@
     if (game && game.status === 'playing') {
       input.viewport = viewport;
       Game.stepGame(game, input, dt);
+      playEvents(game.events);
       updateHud();
       renderer.render(game, viewport);
+    } else if (game && game.status === 'card-select') {
+      updateHud();
+      renderer.render(game, viewport);
+      showCards();
     } else if (game && game.status === 'victory') {
       updateHud();
       renderer.render(game, viewport);
@@ -111,7 +125,10 @@
   function updateHud() {
     const player = Game.getPlayer(game);
     if (!player) return;
-    ui.length.textContent = String(player.length);
+    ui.level.textContent = String(player.level);
+    ui.xpFill.style.width = `${Math.round((player.xp / C.XP_PER_LEVEL) * 100)}%`;
+    ui.length.textContent = String(player.segments.length);
+    ui.turrets.textContent = `${Game.countTurrets(player)}/${C.MAX_TURRETS}`;
     ui.kills.textContent = String(player.kills);
     ui.time.textContent = formatTime(game.elapsed);
     ui.boostFill.style.width = `${Math.round(player.boostEnergy)}%`;
@@ -128,14 +145,16 @@
     const rows = [
       ['结果', isVictory ? '胜利' : summary.result === 'defeat' ? '失败' : '主动结束'],
       ['游戏时间', formatTime(summary.elapsed)],
+      ['最终等级', summary.playerLevel],
       ['最终长度', summary.playerLength],
+      ['最终炮塔', summary.playerTurrets],
       ['历史最高长度', bestLength],
       ['是否新纪录', isNewRecord ? '是' : '否'],
-      ['玩家吃果数', summary.playerFruit],
+      ['玩家总经验', summary.playerXp],
       ['玩家击杀数', summary.playerKills],
-      ['敌人总吃果数', summary.enemyFruit],
+      ['敌人总经验', summary.enemyXp],
       ['敌人总击杀数', summary.enemyKills],
-      ['吃果最多', summary.topFruitName],
+      ['经验最多', summary.topXpName],
       ['击杀最多', summary.topKillsName],
     ];
     for (const [label, value] of rows) {
@@ -146,6 +165,52 @@
       summaryList.append(dt, dd);
     }
     modal.classList.remove('is-hidden');
+  }
+
+
+  function showCards() {
+    if (!game || !game.pendingCards.length || !cardModal.classList.contains('is-hidden')) return;
+    playTone(740, 0.14, 'sine');
+    cardOptions.innerHTML = '';
+    for (const card of game.pendingCards) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'card-button';
+      button.innerHTML = `<span class="card-rarity ${card.rarity}">${C.RARITY_LABELS[card.rarity]}</span><strong>${card.title}</strong><p>${card.desc}</p>`;
+      button.addEventListener('click', () => {
+        Game.resolvePlayerCard(game, card.id);
+        cardModal.classList.add('is-hidden');
+        playTone(920, 0.12, 'triangle');
+      });
+      cardOptions.append(button);
+    }
+    cardModal.classList.remove('is-hidden');
+  }
+
+  function playEvents(events = []) {
+    for (const event of events) {
+      if (event.type === 'xp' && event.player) playTone(260 + event.value * 16, 0.035, 'sine');
+      if (event.type === 'level' && event.player) playTone(720, 0.12, 'triangle');
+      if (event.type === 'shoot' && event.player) playTone(180, 0.025, 'square');
+      if (event.type === 'laser' && event.player) playTone(520, 0.045, 'sawtooth');
+      if (event.type === 'hit') playTone(120, 0.025, 'sine');
+      if (event.type === 'pop') playTone(90, 0.08, 'triangle');
+      if (event.type === 'playerDeath') playTone(70, 0.35, 'sawtooth');
+    }
+  }
+
+  function playTone(frequency, duration, type = 'sine') {
+    if (!soundToggle.checked) return;
+    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    gain.gain.value = Number(volumeRange.value) / 100 * 0.08;
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
   }
 
   function applyViewport() {

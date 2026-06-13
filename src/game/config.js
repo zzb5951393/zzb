@@ -1,10 +1,10 @@
 (function () {
   const WORLD_SIZE = 4000;
   const TARGET_SNAKE_COUNT = 10;
-  const FOOD_TARGET_COUNT = 180;
   const PLAYER_COLOR = '#2f80ff';
-  const STORAGE_KEY = 'explorer-snake-best-length';
-  const INITIAL_LENGTH = 3;
+  const STORAGE_KEY = 'explorer-snake-rogue-records';
+  const INITIAL_SEGMENTS = 3;
+  const SEGMENT_HP = 30;
   const SEGMENT_SPACING = 18;
   const SNAKE_RADIUS = 12;
   const PLAYER_SPEED = 300;
@@ -15,6 +15,12 @@
   const BOOST_MAX_SECONDS = 5;
   const BOOST_DRAIN_PER_SECOND = 100 / BOOST_MAX_SECONDS;
   const BOOST_REGEN_PER_SECOND = 10;
+  const XP_PER_LEVEL = 100;
+  const PLAYER_MAGNET_RANGE = 80;
+  const AI_MAGNET_RANGE = 60;
+  const XP_MAGNET_SPEED = 400;
+  const MAX_TURRETS = 10;
+  const TURRET_TARGET_INTERVAL = 0.2;
   const WIN_AREA_RATIO = 0.5;
 
   const VIEWPORT_PRESETS = Object.freeze([
@@ -26,25 +32,16 @@
   ]);
 
   const MAP_THEMES = Object.freeze({
-    grass: {
-      label: '普通草地',
-      background: '#a8e46d',
-      grid: 'rgba(43, 116, 53, 0.12)',
-      decoration: '#7cca50',
-    },
-    desert: {
-      label: '沙漠',
-      background: '#e8c06a',
-      grid: 'rgba(139, 92, 33, 0.13)',
-      decoration: '#d4a653',
-    },
+    grass: { label: '普通草地', background: '#a8e46d', grid: 'rgba(43, 116, 53, 0.12)', decoration: '#7cca50' },
+    desert: { label: '沙漠', background: '#e8c06a', grid: 'rgba(139, 92, 33, 0.13)', decoration: '#d4a653' },
   });
 
-  const FOOD_TYPES = Object.freeze({
-    normal: { label: '普通果子', radius: 7, color: '#ff6f61', glow: '#ffc0a6', growth: 1, energy: 0, weight: 78, hint: false },
-    large: { label: '大果子', radius: 12, color: '#ffbd3d', glow: '#fff0a3', growth: 3, energy: 0, weight: 9, hint: true },
-    boost: { label: '加速果子', radius: 10, color: '#58d7ff', glow: '#c8f5ff', growth: 1, energy: 30, weight: 8, hint: true },
-    bait: { label: '诱饵果子', radius: 11, color: '#d95cff', glow: '#f4c0ff', growth: 2, energy: 0, weight: 5, hint: true },
+  const XP_BEAN_TYPES = Object.freeze({
+    xp1: { label: '小经验豆', value: 1, radius: 3, color: '#d6ff6b', glow: '#f4ffc2', target: 650, weight: 72 },
+    xp5: { label: '普通经验豆', value: 5, radius: 5, color: '#75f06d', glow: '#cbffc7', target: 130, weight: 20 },
+    xp10: { label: '中型经验豆', value: 10, radius: 7, color: '#56d6ff', glow: '#c9f5ff', target: 45, weight: 6 },
+    xp20: { label: '大型经验豆', value: 20, radius: 9, color: '#ffb23d', glow: '#ffe3a3', target: 14, weight: 1.7 },
+    xp50: { label: '超级经验豆', value: 50, radius: 12, color: '#e76cff', glow: '#f8ccff', target: 3, weight: 0.3 },
   });
 
   const PERSONALITIES = Object.freeze([
@@ -54,27 +51,48 @@
     { key: 'wanderer', label: '游荡型', color: '#a56eff' },
   ]);
 
+  const TURRET_TYPES = Object.freeze({
+    machine: { label: '机枪塔', rarity: 'common', range: 500, fireRate: 2, damage: 3, color: '#ffe36e', kind: 'projectile', projectileSpeed: 760 },
+    shotgun: { label: '散弹枪塔', rarity: 'rare', range: 220, fireRate: 1, damage: 9, color: '#ff9a55', kind: 'instant' },
+    laser: { label: '激光塔', rarity: 'legendary', range: 1800, fireRate: 4, damage: 2, color: '#ff5cf4', kind: 'laser', unique: true },
+  });
+
+  const RARITY_WEIGHTS = Object.freeze({ common: 60, rare: 25, epic: 12, legendary: 3 });
+  const RARITY_LABELS = Object.freeze({ common: '普通', rare: '稀有', epic: '史诗', legendary: '传说' });
+
+  const TURRET_SLOTS = Object.freeze([1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
+
   window.ExplorerSnakeConfig = Object.freeze({
     AI_BOOST_SPEED,
+    AI_MAGNET_RANGE,
     AI_SPEED,
     BOOST_DRAIN_PER_SECOND,
     BOOST_MAX_SECONDS,
     BOOST_REGEN_PER_SECOND,
     BOOST_SPEED,
-    FOOD_TARGET_COUNT,
-    FOOD_TYPES,
-    INITIAL_LENGTH,
+    INITIAL_SEGMENTS,
     MAP_THEMES,
+    MAX_TURRETS,
     PERSONALITIES,
     PLAYER_COLOR,
+    PLAYER_MAGNET_RANGE,
     PLAYER_SPEED,
+    RARITY_LABELS,
+    RARITY_WEIGHTS,
+    SEGMENT_HP,
     SEGMENT_SPACING,
     SNAKE_RADIUS,
     STORAGE_KEY,
     TARGET_SNAKE_COUNT,
+    TURRET_SLOTS,
+    TURRET_TARGET_INTERVAL,
+    TURRET_TYPES,
     TURN_RATE,
     VIEWPORT_PRESETS,
     WIN_AREA_RATIO,
     WORLD_SIZE,
+    XP_BEAN_TYPES,
+    XP_MAGNET_SPEED,
+    XP_PER_LEVEL,
   });
 }());

@@ -19,7 +19,9 @@
 
     render(state, viewport) {
       this.drawBackground(state, viewport);
-      this.drawFoods(state, viewport);
+      this.drawBeans(state, viewport);
+      this.drawProjectiles(state, viewport);
+      this.drawLasers(state, viewport);
       this.drawSnakes(state, viewport);
       this.drawEdgeHints(state, viewport);
     }
@@ -69,20 +71,44 @@
       }
     }
 
-    drawFoods(state, viewport) {
-      for (const food of state.foods) {
-        const type = C.FOOD_TYPES[food.type];
-        const p = this.worldToScreen(food, state, viewport);
+    drawBeans(state, viewport) {
+      for (const bean of state.beans) {
+        const type = C.XP_BEAN_TYPES[bean.type];
+        const p = this.worldToScreen(bean, state, viewport);
         if (!isVisible(p, type.radius + 30, viewport)) continue;
         this.ctx.shadowColor = type.glow;
-        this.ctx.shadowBlur = type.type === 'bait' ? 18 : 10;
+        this.ctx.shadowBlur = type.value >= 20 ? 16 : 8;
         this.ctx.fillStyle = type.color;
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, type.radius, 0, Math.PI * 2);
         this.ctx.fill();
         this.ctx.shadowBlur = 0;
         this.ctx.strokeStyle = type.glow;
-        this.ctx.lineWidth = food.type === 'bait' ? 3 : 1.5;
+        this.ctx.lineWidth = type.value >= 20 ? 2.5 : 1.4;
+        this.ctx.stroke();
+      }
+    }
+
+    drawProjectiles(state, viewport) {
+      for (const projectile of state.projectiles) {
+        const p = this.worldToScreen(projectile, state, viewport);
+        if (!isVisible(p, 20, viewport)) continue;
+        this.ctx.fillStyle = projectile.color;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
+    drawLasers(state, viewport) {
+      for (const laser of state.lasers) {
+        const from = this.worldToScreen(laser.from, state, viewport);
+        const to = this.worldToScreen(laser.to, state, viewport);
+        this.ctx.strokeStyle = laser.kind === 'laser' ? 'rgba(255,92,244,0.8)' : 'rgba(255,160,80,0.75)';
+        this.ctx.lineWidth = laser.kind === 'laser' ? 3 : 5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(from.x, from.y);
+        this.ctx.lineTo(to.x, to.y);
         this.ctx.stroke();
       }
     }
@@ -103,10 +129,14 @@
         if (!isVisible(p, C.SNAKE_RADIUS + 20, viewport)) continue;
         const isHead = index === 0;
         const radius = isHead ? C.SNAKE_RADIUS * 1.22 : C.SNAKE_RADIUS;
+        const segmentState = snake.segments[index];
         this.ctx.fillStyle = snake.color;
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
         this.ctx.fill();
+        if (segmentState?.shield) this.drawShield(p, radius);
+        if (segmentState?.turret) this.drawTurret(p, snake, radius, segmentState.turret.type);
+        if (segmentState && segmentState.hp < segmentState.maxHp) this.drawHpRing(p, radius, segmentState.hp / segmentState.maxHp);
 
         if (!snake.isPlayer && !isHead && index % 2 === 0) {
           this.ctx.fillStyle = 'rgba(255,255,255,0.32)';
@@ -119,6 +149,39 @@
           this.drawHeadDetails(p, snake, radius);
         }
       }
+    }
+
+
+    drawTurret(p, snake, radius, type) {
+      const def = C.TURRET_TYPES[type];
+      const angle = snake.angle;
+      this.ctx.save();
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate(angle);
+      this.ctx.fillStyle = def.color;
+      this.ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.roundRect(-radius * 0.25, -radius * 0.25, radius * 0.9, radius * 0.5, 4);
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+
+    drawShield(p, radius) {
+      this.ctx.strokeStyle = 'rgba(130, 230, 255, 0.78)';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+
+    drawHpRing(p, radius, ratio) {
+      this.ctx.strokeStyle = ratio > 0.5 ? 'rgba(255,255,255,0.55)' : 'rgba(255,80,80,0.85)';
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, ratio));
+      this.ctx.stroke();
     }
 
     drawHeadDetails(p, snake, radius) {
@@ -148,7 +211,7 @@
       const player = S.getPlayer(state);
       if (!player) return;
       const targets = [
-        ...state.foods.filter((food) => C.FOOD_TYPES[food.type].hint),
+        ...state.beans.filter((bean) => C.XP_BEAN_TYPES[bean.type].value >= 20),
         ...state.snakes.filter((snake) => !snake.isPlayer && snake.alive),
       ];
       const ctx = this.ctx;
@@ -161,7 +224,7 @@
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
-        ctx.fillStyle = target.type ? C.FOOD_TYPES[target.type].color : 'rgba(255,80,80,0.85)';
+        ctx.fillStyle = target.type ? C.XP_BEAN_TYPES[target.type].color : 'rgba(255,80,80,0.85)';
         ctx.beginPath();
         ctx.moveTo(13, 0);
         ctx.lineTo(-8, -8);

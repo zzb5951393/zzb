@@ -12,7 +12,7 @@
       <section id="menu-screen" class="panel menu-panel">
         <p class="eyebrow">Explorer Snake Arena</p>
         <h1>探知者</h1>
-        <p class="intro">鼠标控制方向，按住左键加速。吃果子成长，用身体封路击杀敌蛇，占据半屏即可胜利。</p>
+        <p class="intro">鼠标控制方向，按住左键加速。吃经验升级、三选一抽卡、安装炮塔、强化身体。</p>
         <div class="menu-actions">
           <button id="start-game-button" type="button" class="primary-button">开始游戏</button>
           <button id="settings-button" type="button" class="secondary-button">设置</button>
@@ -28,6 +28,9 @@
           <option value="grass">普通草地</option>
           <option value="desert">沙漠</option>
         </select>
+        <label class="checkbox-row"><input id="sound-toggle" type="checkbox" checked /> 开启音效</label>
+        <label for="volume-range">总音量</label>
+        <input id="volume-range" type="range" min="0" max="100" value="45" />
         <div class="menu-actions">
           <button id="apply-settings-button" type="button" class="primary-button">应用设置</button>
           <button id="close-settings-button" type="button" class="secondary-button">返回</button>
@@ -37,12 +40,23 @@
       <section id="game-screen" class="game-screen is-hidden" aria-label="正式游戏画面">
         <canvas id="game-canvas" aria-label="探知者游戏场景"></canvas>
         <header class="hud" aria-label="游戏信息">
+          <div><span>等级</span><strong id="level-value">1</strong></div>
+          <div class="xp-widget"><span>经验</span><div class="energy-track xp-track"><i id="xp-fill"></i></div></div>
           <div><span>长度</span><strong id="length-value">3</strong></div>
+          <div><span>炮塔</span><strong id="turrets-value">0/10</strong></div>
           <div><span>击杀</span><strong id="kills-value">0</strong></div>
           <div><span>时间</span><strong id="time-value">00:00</strong></div>
           <div class="boost-widget"><span>加速能量</span><div class="energy-track"><i id="boost-fill"></i></div></div>
         </header>
         <button id="end-run-button" type="button" class="end-run-button">结束本局</button>
+      </section>
+
+      <section id="card-modal" class="modal is-hidden" aria-live="polite">
+        <div class="modal-card card-modal-card">
+          <p class="eyebrow">Level Up</p>
+          <h2>选择一张进化卡</h2>
+          <div id="card-options" class="card-options"></div>
+        </div>
       </section>
 
       <section id="modal" class="modal is-hidden" aria-live="polite">
