@@ -654,6 +654,7 @@
   }
 
   function updateProjectiles(state, dt) {
+    if (state.projectiles.length > 240) state.projectiles.splice(0, state.projectiles.length - 240);
     for (let index = state.projectiles.length - 1; index >= 0; index -= 1) {
       const projectile = state.projectiles[index];
       const owner = state.snakes.find((snake) => snake.id === projectile.ownerId);
@@ -744,7 +745,7 @@
         if (delta <= def.coneAngle / 2) hits.push({ snake, segmentIndex, distance: d });
       }
     }
-    hits.sort((a, b) => a.distance - b.distance).slice(0, def.maxHits).forEach((hit) => {
+    hits.sort((a, b) => a.distance - b.distance).slice(0, def.maxHits).sort((a, b) => a.snake.id === b.snake.id ? b.segmentIndex - a.segmentIndex : 0).forEach((hit) => {
       const segment = hit.snake.segments[hit.segmentIndex];
       if (!segment) return;
       applyDamage(state, hit.snake, hit.segmentIndex, damage, owner, 'flame');
@@ -981,9 +982,11 @@
     for (const snake of state.snakes) {
       if (!snake.alive || snake.effects.invincible > 0) continue;
       const points = getSnakeSegments(snake);
-      for (let i = 0; i < points.length; i += 1) {
+      for (let i = points.length - 1; i >= 0; i -= 1) {
+        const segment = snake.segments[i];
+        if (!segment) continue;
         if (distance(points[i], boss) <= C.BOSS_CONFIG.aoeRadius && !lineBlockedByObstacle(state, boss, points[i])) {
-          applyDamage(state, snake, i, snake.segments[i].maxHp * C.BOSS_CONFIG.aoeDamageRatio, null, 'bossAoe');
+          applyDamage(state, snake, i, segment.maxHp * C.BOSS_CONFIG.aoeDamageRatio, null, 'bossAoe');
           if (snake.isPlayer) state.events.push({ type: 'bossAoeHit', player: true });
         }
       }
@@ -1086,7 +1089,8 @@
     for (const snake of state.snakes) {
       if (!snake.alive || snake.id === owner?.id) continue;
       const points = getSnakeSegments(snake);
-      for (let i = 0; i < points.length; i += 1) {
+      for (let i = points.length - 1; i >= 0; i -= 1) {
+        if (!snake.segments[i]) continue;
         if (distance(projectile, points[i]) <= (projectile.explosionRadius || 0)) applyDamage(state, snake, i, i === 0 ? projectile.damage : projectile.splashDamage, owner, 'missile');
       }
     }
@@ -1113,6 +1117,7 @@
   }
 
   function addEffect(state, type, x, y, color, radius = 16) {
+    if (state.effects.length > 220) state.effects.splice(0, state.effects.length - 220);
     state.effects.push({ type, x, y, color, radius, ttl: type === 'bossAoe' ? 0.38 : type === 'explosion' ? 0.45 : 0.22 });
   }
 
