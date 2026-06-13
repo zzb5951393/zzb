@@ -49,6 +49,10 @@ scripts/check-modules.mjs     # 本地语法与素材存在性检查
 - **配置集中**：棋盘大小、速度、分数、素材雪碧图坐标都在 `config.js`，方便快速调参。
 - **本地优先**：当前只用浏览器原生能力和 Python 静态服务器，方便先验证玩法；以后如果需要排行榜、账号、关卡配置或 PWA 离线缓存，可以在现有结构上继续加。
 
+## GitHub PR 合并冲突
+
+如果 GitHub 显示 `This branch has conflicts that must be resolved`，不要直接在网页里手动改核心游戏文件。推荐关闭旧的冲突 PR，使用最新重新创建的干净 PR。更详细的说明见 [`docs/github-pr-troubleshooting.md`](./docs/github-pr-troubleshooting.md)。
+
 ## 后续需要你补充的信息
 
 为了把下一版规则和体验定准，建议你接下来确认这些点：
