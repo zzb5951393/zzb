@@ -15,10 +15,15 @@
   const BOOST_MAX_SECONDS = 5;
   const BOOST_DRAIN_PER_SECOND = 100 / BOOST_MAX_SECONDS;
   const BOOST_REGEN_PER_SECOND = 10;
-  const XP_PER_LEVEL = 100;
-  const PLAYER_MAGNET_RANGE = 80;
-  const AI_MAGNET_RANGE = 60;
-  const XP_MAGNET_SPEED = 400;
+  const XP_BASE_PER_LEVEL = 100;
+  const XP_LEVEL_GROWTH = 1.2;
+  const PLAYER_MAGNET_RANGE = 60;
+  const AI_MAGNET_RANGE = 45;
+  const XP_MAGNET_SPEED = 350;
+  const REGEN_DELAY_SECONDS = 5;
+  const BASE_REGEN_PER_SECOND = 1;
+  const HEAD_DAMAGED_SPEED_MULTIPLIER = 0.7;
+  const HEAD_RECOVERY_RATIO = 0.3;
   const MAX_TURRETS = 10;
   const TURRET_TARGET_INTERVAL = 0.2;
   const WIN_AREA_RATIO = 0.5;
@@ -76,7 +81,8 @@
   const TURRET_TYPES = Object.freeze({
     machine: { label: '机枪塔', rarity: 'common', range: 500, fireRate: 2, damage: 3, color: '#ffe36e', kind: 'projectile', projectileSpeed: 760 },
     shotgun: { label: '散弹枪塔', rarity: 'rare', range: 220, fireRate: 1, damage: 9, color: '#ff9a55', kind: 'instant' },
-    laser: { label: '激光塔', rarity: 'legendary', range: 1800, fireRate: 4, damage: 2, color: '#ff5cf4', kind: 'laser', unique: true },
+    flame: { label: '火焰炮塔', rarity: 'rare', range: 300, fireRate: 1, damage: 2, color: '#ff6b2f', kind: 'flame', coneAngle: Math.PI / 3, maxHits: 6, burnDuration: 5, burnDps: 1 },
+    laser: { label: '激光塔', rarity: 'legendary', range: 350, fireRate: 4, damage: 1.8, color: '#ff5cf4', kind: 'laser', unique: true },
   });
 
   const RARITY_WEIGHTS = Object.freeze({ common: 60, rare: 25, epic: 12, legendary: 3 });
@@ -88,11 +94,14 @@
     AI_BOOST_SPEED,
     AI_MAGNET_RANGE,
     AI_SPEED,
+    BASE_REGEN_PER_SECOND,
     BOOST_DRAIN_PER_SECOND,
     BOOST_MAX_SECONDS,
     BOOST_REGEN_PER_SECOND,
     BOSS_CONFIG,
     BOOST_SPEED,
+    HEAD_DAMAGED_SPEED_MULTIPLIER,
+    HEAD_RECOVERY_RATIO,
     INITIAL_SEGMENTS,
     MAP_THEMES,
     MAX_TURRETS,
@@ -105,6 +114,7 @@
     PLAYER_SPEED,
     RARITY_LABELS,
     RARITY_WEIGHTS,
+    REGEN_DELAY_SECONDS,
     SEGMENT_HP,
     SEGMENT_SPACING,
     SNAKE_RADIUS,
@@ -118,7 +128,8 @@
     WIN_AREA_RATIO,
     WORLD_SIZE,
     XP_BEAN_TYPES,
+    XP_BASE_PER_LEVEL,
+    XP_LEVEL_GROWTH,
     XP_MAGNET_SPEED,
-    XP_PER_LEVEL,
   });
 }());

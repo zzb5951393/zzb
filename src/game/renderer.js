@@ -204,15 +204,18 @@
         if (!isVisible(p, C.SNAKE_RADIUS + 20, viewport)) continue;
         const isHead = index === 0;
         const baseRadius = C.SNAKE_RADIUS * (snake.effects.giant > 0 ? 3 : 1);
-        const radius = isHead ? baseRadius * 1.22 : baseRadius;
         const segmentState = snake.segments[index];
+        const equipmentScale = segmentState?.turret && segmentState?.shield ? 1.2 : segmentState?.turret ? 1.18 : segmentState?.shield ? 1.15 : 1;
+        const radius = (isHead ? baseRadius * 1.22 : baseRadius) * equipmentScale;
         this.ctx.fillStyle = snake.color;
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
         this.ctx.fill();
         if (segmentState?.shield) this.drawShield(p, radius);
+        if (segmentState) this.drawHpRing(p, radius, segmentState.hp / segmentState.maxHp, snake.isPlayer || isNearPlayer(state, snake));
+        if (segmentState?.burn > 0) this.drawBurning(p, radius);
         if (segmentState?.turret) this.drawTurret(p, snake, radius, segmentState.turret.type);
-        if (segmentState && segmentState.hp < segmentState.maxHp) this.drawHpRing(p, radius, segmentState.hp / segmentState.maxHp);
+        if (snake.headDamaged && isHead) this.drawHeadDamaged(p, radius);
         if (snake.effects.invincible > 0) this.drawInvincibleAura(p, radius);
 
         if (!snake.isPlayer && !isHead && index % 2 === 0) {
@@ -248,25 +251,64 @@
       this.ctx.strokeStyle = 'rgba(0,0,0,0.28)';
       this.ctx.lineWidth = 1.5;
       this.ctx.beginPath();
-      this.ctx.roundRect(-radius * 0.25, -radius * 0.25, radius * 0.9, radius * 0.5, 4);
+      if (type === 'laser') {
+        this.ctx.arc(radius * 0.18, 0, radius * 0.32, 0, Math.PI * 2);
+      } else if (type === 'flame') {
+        this.ctx.moveTo(-radius * 0.25, -radius * 0.34);
+        this.ctx.lineTo(radius * 0.9, 0);
+        this.ctx.lineTo(-radius * 0.25, radius * 0.34);
+        this.ctx.closePath();
+      } else {
+        this.ctx.roundRect(-radius * 0.25, -radius * 0.25, radius * 0.9, radius * 0.5, 4);
+      }
       this.ctx.fill();
       this.ctx.stroke();
       this.ctx.restore();
     }
 
     drawShield(p, radius) {
-      this.ctx.strokeStyle = 'rgba(130, 230, 255, 0.78)';
-      this.ctx.lineWidth = 2;
+      this.ctx.strokeStyle = 'rgba(98, 226, 255, 0.9)';
+      this.ctx.lineWidth = 4;
       this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, radius + 4, 0, Math.PI * 2);
+      this.ctx.arc(p.x, p.y, radius + 7, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.strokeStyle = 'rgba(210, 250, 255, 0.35)';
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 11, 0, Math.PI * 2);
       this.ctx.stroke();
     }
 
-    drawHpRing(p, radius, ratio) {
-      this.ctx.strokeStyle = ratio > 0.5 ? 'rgba(255,255,255,0.55)' : 'rgba(255,80,80,0.85)';
-      this.ctx.lineWidth = 2;
+    drawHpRing(p, radius, ratio, alwaysShow) {
+      if (!alwaysShow && ratio >= 0.98) return;
+      const color = ratio > 0.55 ? 'rgba(83,255,111,0.9)' : ratio > 0.3 ? 'rgba(255,220,77,0.95)' : 'rgba(255,67,67,0.98)';
+      this.ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      this.ctx.lineWidth = 3.5;
       this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, radius + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, ratio));
+      this.ctx.arc(p.x, p.y, radius + 3, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.strokeStyle = color;
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, ratio));
+      this.ctx.stroke();
+    }
+
+    drawBurning(p, radius) {
+      this.ctx.strokeStyle = 'rgba(255, 94, 36, 0.95)';
+      this.ctx.lineWidth = 2.5;
+      this.ctx.setLineDash([3, 4]);
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 9, 0, Math.PI * 2);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+    }
+
+    drawHeadDamaged(p, radius) {
+      this.ctx.strokeStyle = 'rgba(255, 55, 55, 0.95)';
+      this.ctx.lineWidth = 4;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, radius + 12, -Math.PI * 0.2, Math.PI * 1.25);
       this.ctx.stroke();
     }
 
@@ -321,6 +363,12 @@
         ctx.restore();
       }
     }
+  }
+
+  function isNearPlayer(state, snake) {
+    const player = S.getPlayer(state);
+    if (!player || snake.isPlayer) return true;
+    return Math.hypot(S.shortestDelta(snake.x, player.x), S.shortestDelta(snake.y, player.y)) < 620;
   }
 
   function isVisible(point, margin, viewport) {

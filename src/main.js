@@ -128,13 +128,15 @@
     const player = Game.getPlayer(game);
     if (!player) return;
     ui.level.textContent = String(player.level);
-    ui.xpFill.style.width = `${Math.round((player.xp / C.XP_PER_LEVEL) * 100)}%`;
+    const nextLevelExp = Game.getNextLevelExp(player);
+    ui.xpFill.style.width = `${Math.round((player.xp / nextLevelExp) * 100)}%`;
+    ui.level.title = `下一级需要 ${nextLevelExp} 经验`;
     ui.length.textContent = String(player.segments.length);
     ui.turrets.textContent = `${Game.countTurrets(player)}/${C.MAX_TURRETS}`;
     ui.kills.textContent = String(player.kills);
     ui.time.textContent = formatTime(game.elapsed);
     ui.boostFill.style.width = `${Math.round(player.boostEnergy)}%`;
-    ui.status.textContent = player.effects.invincible > 0 ? '无敌' : player.effects.giant > 0 ? '巨大化' : '普通';
+    ui.status.textContent = player.effects.invincible > 0 ? '无敌' : player.effects.giant > 0 ? '巨大化' : player.headDamaged ? '头部受损' : '普通';
     const nearestBoss = game.bosses.filter((boss) => boss.alive).sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y))[0];
     ui.bossFill.style.width = nearestBoss ? `${Math.round((nearestBoss.hp / nearestBoss.maxHp) * 100)}%` : '0%';
   }
@@ -198,6 +200,7 @@
       if (event.type === 'xp' && event.player) playTone(260 + event.value * 16, 0.035, 'sine');
       if (event.type === 'level' && event.player) playTone(720, 0.12, 'triangle');
       if (event.type === 'shoot' && event.player) playTone(180, 0.025, 'square');
+      if (event.type === 'flame' && event.player) playTone(260, 0.06, 'sawtooth');
       if (event.type === 'laser' && event.player) playTone(520, 0.045, 'sawtooth');
       if (event.type === 'hit') playTone(120, 0.025, 'sine');
       if (event.type === 'pop') playTone(90, 0.08, 'triangle');

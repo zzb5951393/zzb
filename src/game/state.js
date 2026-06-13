@@ -23,7 +23,8 @@
     { id: 'body3', title: '身体增长 III', rarity: 'epic', desc: '身体长度 +3', type: 'body', amount: 3 },
     { id: 'machine', title: '机枪塔', rarity: 'common', desc: '获得 1 个稳定中距离炮塔', type: 'turret', turret: 'machine' },
     { id: 'shotgun', title: '散弹枪塔', rarity: 'rare', desc: '获得 1 个近距离高伤炮塔', type: 'turret', turret: 'shotgun' },
-    { id: 'laser', title: '激光塔', rarity: 'legendary', desc: '获得 1 个远程持续激光塔', type: 'turret', turret: 'laser' },
+    { id: 'flame', title: '火焰炮塔', rarity: 'rare', desc: '获得 1 个近中距离扇形燃烧炮塔', type: 'turret', turret: 'flame' },
+    { id: 'laser', title: '激光塔', rarity: 'legendary', desc: '获得 1 个短中距离精准激光塔', type: 'turret', turret: 'laser' },
     { id: 'ammo', title: '强化弹药', rarity: 'rare', desc: '所有炮塔伤害 +10%', type: 'mod', key: 'damageBonus', amount: 0.1, max: 1 },
     { id: 'reload', title: '快速装填', rarity: 'rare', desc: '所有炮塔攻速 +10%', type: 'mod', key: 'fireRateBonus', amount: 0.1, max: 0.75 },
     { id: 'range', title: '扩大射程', rarity: 'common', desc: '所有炮塔射程 +10%', type: 'mod', key: 'rangeBonus', amount: 0.1, max: 0.75 },
@@ -32,8 +33,14 @@
     { id: 'repair', title: '应急修复', rarity: 'common', desc: '所有圆球立即恢复 5 点血', type: 'repair', amount: 5 },
     { id: 'speed', title: '灵巧游动', rarity: 'common', desc: '移动速度 +5%', type: 'mod', key: 'speedBonus', amount: 0.05, max: 0.3 },
     { id: 'regen', title: '快速回能', rarity: 'common', desc: '加速能量恢复 +15%', type: 'mod', key: 'boostRegenBonus', amount: 0.15, max: 0.75 },
-    { id: 'magnet', title: '经验磁铁', rarity: 'common', desc: '经验吸附范围 +40px', type: 'magnet', amount: 40 },
-    { id: 'xpplus', title: '高效吸收', rarity: 'rare', desc: '获得经验值 +10%', type: 'mod', key: 'xpBonus', amount: 0.1, max: 0.3 },
+    { id: 'magnet', title: '经验磁铁', rarity: 'rare', desc: '经验吸附范围 +5px（最多 8 次）', type: 'magnet', amount: 5, maxStacks: 8 },
+    { id: 'xpplus', title: '高效吸收', rarity: 'rare', desc: '获得经验值 +8%', type: 'mod', key: 'xpBonus', amount: 0.08, max: 0.24 },
+    { id: 'quick-heal', title: '快速愈合', rarity: 'common', desc: '脱战回血速度 +0.5 HP/s', type: 'mod', key: 'regenBonus', amount: 0.5, max: 2 },
+    { id: 'strong-regen', title: '强效再生', rarity: 'rare', desc: '脱战回血速度 +1 HP/s', type: 'mod', key: 'regenBonus', amount: 1, max: 4 },
+    { id: 'early-heal', title: '提前愈合', rarity: 'rare', desc: '脱战回血等待 -1 秒（最低 2 秒）', type: 'mod', key: 'regenDelayReduction', amount: 1, max: 3 },
+    { id: 'skin-regen', title: '再生外皮', rarity: 'epic', desc: '非燃烧/非毒云时战斗中也缓慢回血', type: 'mod', key: 'combatRegen', amount: 1, max: 1 },
+    { id: 'head-repair', title: '头部修复', rarity: 'rare', desc: '头部受损时额外 +2 HP/s', type: 'mod', key: 'headRepairBonus', amount: 2, max: 2 },
+    { id: 'life-cycle', title: '生命循环', rarity: 'epic', desc: '离开毒云后尾部回血 +2 HP/s', type: 'mod', key: 'tailRegenBonus', amount: 2, max: 2 },
   ]);
 
   function createGame(options = {}) {
@@ -102,14 +109,16 @@
       pendingTurrets: [],
       effects: { invincible: 0, giant: 0 },
       poisonTimer: 0,
-      mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0 },
+      inPoison: false,
+      headDamaged: false,
+      mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0, regenBonus: 0, regenDelayReduction: 0, combatRegen: 0, headRepairBonus: 0, tailRegenBonus: 0, magnetStacks: 0 },
       segments: Array.from({ length: C.INITIAL_SEGMENTS }, createSegment),
       trail: Array.from({ length: 24 }, (_, index) => ({ x: wrap(head.x - Math.cos(angle) * index * C.SEGMENT_SPACING), y: wrap(head.y - Math.sin(angle) * index * C.SEGMENT_SPACING) })),
     };
   }
 
   function createSegment() {
-    return { hp: C.SEGMENT_HP, maxHp: C.SEGMENT_HP, shield: false, turret: null };
+    return { hp: C.SEGMENT_HP, maxHp: C.SEGMENT_HP, shield: false, turret: null, lastDamageAt: 0, burn: 0, burnTick: 0 };
   }
 
 
@@ -158,6 +167,8 @@
     collectBeans(state);
     collectRewards(state);
     updatePoison(state, dt);
+    updateBurning(state, dt);
+    updateRegeneration(state, dt);
     updateBosses(state, dt);
     updateTurrets(state, dt);
     updateProjectiles(state, dt);
@@ -259,7 +270,8 @@
       const boosting = shouldBoost(state, snake);
       const base = snake.isPlayer ? C.PLAYER_SPEED : C.AI_SPEED;
       const boost = snake.isPlayer ? C.BOOST_SPEED : C.AI_BOOST_SPEED;
-      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus);
+      const headPenalty = snake.headDamaged ? C.HEAD_DAMAGED_SPEED_MULTIPLIER : 1;
+      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus) * headPenalty;
       snake.angle = turnToward(snake.angle, snake.targetAngle, C.TURN_RATE * dt);
       snake.x = wrap(snake.x + Math.cos(snake.angle) * speed * dt);
       snake.y = wrap(snake.y + Math.sin(snake.angle) * speed * dt);
@@ -321,8 +333,9 @@
     snake.xp += gained;
     snake.totalXp += gained;
     if (!snake.isPlayer) state.stats.enemyXp += gained;
-    while (snake.xp >= C.XP_PER_LEVEL) {
-      snake.xp -= C.XP_PER_LEVEL;
+    let needed = getNextLevelExp(snake);
+    while (snake.xp >= needed) {
+      snake.xp -= needed;
       snake.level += 1;
       state.events.push({ type: 'level', player: snake.isPlayer });
       if (snake.isPlayer) {
@@ -333,6 +346,7 @@
       }
       applyCard(state, snake, chooseAiCard(snake, generateCards(snake)));
       state.stats.enemyLevelUps += 1;
+      needed = getNextLevelExp(snake);
     }
   }
 
@@ -364,6 +378,7 @@
       if (card.turret === 'laser' && hasTurretType(snake, 'laser')) return false;
     }
     if (card.type === 'mod' && card.max !== undefined && snake.mods[card.key] >= card.max) return false;
+    if (card.type === 'magnet' && snake.mods.magnetStacks >= card.maxStacks) return false;
     return true;
   }
 
@@ -377,6 +392,7 @@
     if (card.type === 'body' && snake.segments.length < 7) score += 5;
     if (card.type === 'hp' || card.type === 'shield' || card.type === 'repair') score += snake.personality.key === 'cautious' ? 6 : 2;
     if (card.type === 'turret' || card.key === 'damageBonus' || card.key === 'fireRateBonus') score += snake.personality.key === 'aggressive' ? 5 : 1;
+    if (card.key === 'regenBonus' || card.key === 'regenDelayReduction' || card.key === 'headRepairBonus') score += snake.headDamaged ? 5 : 1;
     if (card.key === 'xpBonus' || card.key === 'speedBonus' || card.type === 'body') score += snake.personality.key === 'greedy' ? 4 : 1;
     return score;
   }
@@ -389,7 +405,10 @@
     if (card.type === 'hp') increaseMaxHp(snake, card.amount);
     if (card.type === 'shield') installShield(snake);
     if (card.type === 'repair') repairSnake(snake, card.amount);
-    if (card.type === 'magnet') snake.magnetRange += card.amount;
+    if (card.type === 'magnet') {
+      snake.magnetRange += card.amount;
+      snake.mods.magnetStacks += 1;
+    }
     installPendingTurrets(snake);
     state.events.push({ type: 'card', player: snake.isPlayer });
   }
@@ -513,12 +532,14 @@
     if (def.kind === 'projectile') {
       const angle = angleTo(origin, targetPoint);
       state.projectiles.push({ id: `projectile-${nextProjectileId++}`, ownerId: owner.id, x: origin.x, y: origin.y, vx: Math.cos(angle) * def.projectileSpeed, vy: Math.sin(angle) * def.projectileSpeed, damage, ttl: 1.2, color: def.color });
+    } else if (def.kind === 'flame') {
+      fireFlameCone(state, owner, origin, targetPoint, def, damage);
     } else {
       if (bossTarget) damageBoss(state, bossTarget, damage, owner);
       else applyDamage(state, targetSnake, turret.target.segmentIndex, damage, owner);
       state.lasers.push({ from: origin, to: targetPoint, color: def.color, ttl: 0.08, kind: def.kind });
     }
-    state.events.push({ type: def.kind === 'laser' ? 'laser' : 'shoot', player: owner.isPlayer });
+    state.events.push({ type: def.kind === 'laser' ? 'laser' : def.kind === 'flame' ? 'flame' : 'shoot', player: owner.isPlayer });
   }
 
   function updateProjectiles(state, dt) {
@@ -565,12 +586,84 @@
     const shieldReduction = segment.shield ? 0.6 : 0;
     const armorReduction = clamp(snake.mods.armorBonus, 0, 0.75);
     const damage = rawDamage * (1 - shieldReduction) * (1 - armorReduction);
-    segment.hp -= damage;
+    if (damage <= 0) return;
+    segment.hp = Math.max(0, segment.hp - damage);
+    segment.lastDamageAt = state.elapsed;
+    state.events.push({ type: segment.shield ? 'shieldHit' : 'hit', player: snake.isPlayer });
+    if (segmentIndex === 0) {
+      snake.headDamaged = segment.hp <= 0;
+      return;
+    }
     if (segment.hp > 0) return;
     state.events.push({ type: 'pop', player: snake.isPlayer });
     snake.segments.splice(segmentIndex, 1);
-    if (segmentIndex === 0 || snake.segments.length === 0) killSnake(state, snake, sourceSnake);
+    if (snake.segments.length === 0) killSnake(state, snake, sourceSnake);
     installPendingTurrets(snake);
+  }
+
+
+  function fireFlameCone(state, owner, origin, targetPoint, def, damage) {
+    const aim = angleTo(origin, targetPoint);
+    const hits = [];
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.id === owner.id) continue;
+      const points = getSnakeSegments(snake);
+      for (let segmentIndex = 0; segmentIndex < points.length; segmentIndex += 1) {
+        const point = points[segmentIndex];
+        const d = distance(origin, point);
+        if (d > def.range) continue;
+        const delta = Math.abs(((angleTo(origin, point) - aim + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (delta <= def.coneAngle / 2) hits.push({ snake, segmentIndex, distance: d });
+      }
+    }
+    hits.sort((a, b) => a.distance - b.distance).slice(0, def.maxHits).forEach((hit) => {
+      const segment = hit.snake.segments[hit.segmentIndex];
+      if (!segment) return;
+      applyDamage(state, hit.snake, hit.segmentIndex, damage, owner);
+      segment.burn = Math.max(segment.burn || 0, def.burnDuration);
+      segment.burnTick = 0;
+    });
+    state.lasers.push({ from: origin, to: targetPoint, color: def.color, ttl: 0.12, kind: 'flame' });
+  }
+
+  function updateBurning(state, dt) {
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      for (let index = snake.segments.length - 1; index >= 0; index -= 1) {
+        const segment = snake.segments[index];
+        if (!segment?.burn) continue;
+        segment.burn = Math.max(0, segment.burn - dt);
+        segment.burnTick = (segment.burnTick || 0) + dt;
+        while (segment.burnTick >= 1 && segment.burn > 0) {
+          segment.burnTick -= 1;
+          applyDamage(state, snake, index, 1, null);
+          if (!snake.segments[index]) break;
+        }
+      }
+    }
+  }
+
+  function updateRegeneration(state, dt) {
+    for (const snake of state.snakes) {
+      if (!snake.alive) continue;
+      const delay = Math.max(2, C.REGEN_DELAY_SECONDS - snake.mods.regenDelayReduction);
+      for (let index = 0; index < snake.segments.length; index += 1) {
+        const segment = snake.segments[index];
+        if (!segment || segment.hp >= segment.maxHp || segment.burn > 0 || snake.inPoison) continue;
+        const outOfCombat = state.elapsed - (segment.lastDamageAt || 0) >= delay;
+        let regen = outOfCombat ? C.BASE_REGEN_PER_SECOND + snake.mods.regenBonus : 0;
+        if (!outOfCombat && snake.mods.combatRegen > 0) regen += snake.mods.combatRegen;
+        if (index === 0 && snake.headDamaged) regen += snake.mods.headRepairBonus;
+        if (index === snake.segments.length - 1) regen += snake.mods.tailRegenBonus;
+        if (regen > 0) segment.hp = clamp(segment.hp + regen * dt, 0, segment.maxHp);
+      }
+      const head = snake.segments[0];
+      if (head && snake.headDamaged && head.hp >= head.maxHp * C.HEAD_RECOVERY_RATIO) snake.headDamaged = false;
+    }
+  }
+
+  function getNextLevelExp(snake) {
+    return Math.floor(C.XP_BASE_PER_LEVEL * Math.pow(C.XP_LEVEL_GROWTH, Math.max(0, snake.level - 1)));
   }
 
   function resolveCollisions(state) {
@@ -674,8 +767,12 @@
 
   function updatePoison(state, dt) {
     for (const snake of state.snakes) {
-      if (!snake.alive || snake.effects.invincible > 0) continue;
+      if (!snake.alive || snake.effects.invincible > 0) {
+        snake.inPoison = false;
+        continue;
+      }
       const inPoison = getSnakeSegments(snake).some((segment) => state.poisonZones.some((zone) => distance(segment, zone) < zone.radius));
+      snake.inPoison = inPoison;
       if (!inPoison) {
         snake.poisonTimer = 0;
         continue;
@@ -923,6 +1020,7 @@
     endGame,
     getPlayer,
     getSnakeSegments,
+    getNextLevelExp,
     getSummary,
     resolvePlayerCard,
     shortestDelta,
