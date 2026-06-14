@@ -220,6 +220,15 @@
       if (event.type === 'poisonLeave') addFeed('你离开了毒云区域。');
       if (event.type === 'iceEnter') addFeed('你进入冰冻区域，移动速度下降！', 'danger');
       if (event.type === 'bossWarn') addFeed('Boss 正在蓄力范围重击，快离开红圈！', 'danger');
+      if (event.type === 'portal') addFeed('你进入了传送门！空间扭曲后抵达新位置。', 'danger');
+      if (event.type === 'blackHoleWarn') addFeed('星际宇航员释放了黑洞，快使用加速逃离！', 'danger');
+      if (event.type === 'blackHole') addFeed('你被黑洞吸入，所有部位正在受损！', 'danger');
+      if (event.type === 'meteorWarn') addFeed('危险！陨石即将坠落！', 'danger');
+      if (event.type === 'spaceBeamWarn') addFeed('星际宇航员正在发射空间光波！', 'danger');
+      if (event.type === 'spaceBeamHit') addFeed('你被空间光波击中！', 'danger');
+      if (event.type === 'moonGravityWarn') addFeed('满月重力正在压制你，立即撤离！', 'danger');
+      if (event.type === 'moonSeverWarn') addFeed('第二形态正在发动月核断首压制！', 'danger');
+      if (event.type === 'moonSeverHit') addFeed('月核压制命中：头部受损，身体血量被压低！', 'danger');
       if (event.type === 'bossAoeHit') addFeed('你被 Boss 重击命中！', 'danger');
       if (event.type === 'powerup') addFeed('你获得了稀有道具！', 'reward');
       if (event.type === 'chest') addFeed('你获得了宝箱奖励！', 'reward');

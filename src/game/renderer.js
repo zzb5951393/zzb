@@ -21,6 +21,7 @@
       this.drawBackground(state, viewport);
       this.drawPoisonZones(state, viewport);
       this.drawBossHazards(state, viewport);
+      this.drawSpaceHazards(state, viewport);
       this.drawIceZones(state, viewport);
       this.drawChapterTraps(state, viewport);
       this.drawObstacles(state, viewport);
@@ -124,6 +125,55 @@
       }
     }
 
+    drawSpaceHazards(state, viewport) {
+      for (const portal of state.portals || []) {
+        const p = this.worldToScreen(portal, state, viewport);
+        if (!isVisible(p, portal.radius + 30, viewport)) continue;
+        this.ctx.save();
+        this.ctx.translate(p.x, p.y);
+        this.ctx.rotate(portal.angle || 0);
+        const g = this.ctx.createRadialGradient(0, 0, 8, 0, 0, portal.radius);
+        g.addColorStop(0, 'rgba(8,10,34,0.95)');
+        g.addColorStop(0.45, 'rgba(91,67,255,0.52)');
+        g.addColorStop(1, 'rgba(86,218,255,0.08)');
+        this.ctx.fillStyle = g;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, portal.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.strokeStyle = 'rgba(172,143,255,0.9)';
+        this.ctx.lineWidth = 4;
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, 0, portal.radius, portal.radius * 0.45, 0, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+      for (const hole of state.blackHoles || []) {
+        const p = this.worldToScreen(hole, state, viewport);
+        if (!isVisible(p, hole.radius + 20, viewport)) continue;
+        const g = this.ctx.createRadialGradient(p.x, p.y, hole.coreRadius, p.x, p.y, hole.radius);
+        g.addColorStop(0, 'rgba(0,0,0,0.92)');
+        g.addColorStop(0.42, 'rgba(89,59,180,0.45)');
+        g.addColorStop(1, 'rgba(89,59,180,0)');
+        this.ctx.fillStyle = g;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, hole.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+      for (const fog of state.starFogs || []) {
+        const p = this.worldToScreen(fog, state, viewport);
+        if (!isVisible(p, fog.radius + 20, viewport)) continue;
+        this.ctx.fillStyle = 'rgba(11, 8, 32, 0.72)';
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, fog.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        for (let i = 0; i < 18; i += 1) {
+          const a = i * 1.9;
+          this.ctx.fillRect(p.x + Math.cos(a) * fog.radius * ((i % 5) / 5), p.y + Math.sin(a) * fog.radius * ((i % 7) / 7), 2, 2);
+        }
+      }
+    }
+
     drawIceZones(state, viewport) {
       for (const zone of state.iceZones || []) {
         const p = this.worldToScreen(zone, state, viewport);
@@ -208,9 +258,18 @@
         this.ctx.strokeStyle = 'rgba(255, 20, 20, 0.95)';
         this.ctx.lineWidth = 4;
         this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, warning.radius, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.stroke();
+        if (warning.beam) {
+          const endX = p.x + Math.cos(warning.angle || 0) * warning.length;
+          const endY = p.y + Math.sin(warning.angle || 0) * warning.length;
+          this.ctx.lineWidth = warning.width || 40;
+          this.ctx.moveTo(p.x, p.y);
+          this.ctx.lineTo(endX, endY);
+          this.ctx.stroke();
+        } else {
+          this.ctx.arc(p.x, p.y, warning.radius, 0, Math.PI * 2);
+          this.ctx.fill();
+          this.ctx.stroke();
+        }
       }
     }
 
@@ -225,10 +284,13 @@
         else if (boss.type === 'iceBreath') this.drawIceBreathBoss(p, boss);
         else if (boss.type === 'iceQueen') this.drawIceQueenBoss(p, boss);
         else if (boss.type === 'iceGod') this.drawIceGodBoss(p, boss);
+        else if (boss.type === 'astronaut') this.drawAstronautBoss(p, boss, false);
+        else if (boss.type === 'specialAstronaut') this.drawAstronautBoss(p, boss, true);
+        else if (boss.type === 'moonLord') this.drawMoonLordBoss(p, boss);
         else this.drawMushroomBoss(p);
         this.ctx.fillStyle = 'rgba(0,0,0,0.35)';
         this.ctx.fillRect(p.x - 62, p.y - 82, 124, 9);
-        this.ctx.fillStyle = boss.type === 'iceGod' ? '#e8fbff' : boss.type === 'iceQueen' ? '#88bfff' : boss.type === 'iceBreath' ? '#9eeaff' : boss.type === 'viper' ? '#6dff79' : boss.type === 'flame' ? '#ff8a42' : boss.type === 'core' ? '#67d8ff' : '#ff5c86';
+        this.ctx.fillStyle = boss.type === 'iceGod' ? '#e8fbff' : boss.type === 'iceQueen' ? '#88bfff' : boss.type === 'moonLord' ? '#ffd7fa' : boss.type === 'specialAstronaut' ? '#b65cff' : boss.type === 'astronaut' ? '#d9e6ff' : boss.type === 'iceBreath' ? '#9eeaff' : boss.type === 'viper' ? '#6dff79' : boss.type === 'flame' ? '#ff8a42' : boss.type === 'core' ? '#67d8ff' : '#ff5c86';
         this.ctx.fillRect(p.x - 62, p.y - 82, 124 * Math.max(0, boss.hp / boss.maxHp), 9);
       }
     }
@@ -391,6 +453,53 @@
       this.ctx.shadowBlur = 0;
     }
 
+    drawAstronautBoss(p, boss, special) {
+      this.ctx.save();
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate(boss.angle || 0);
+      this.ctx.fillStyle = special ? '#6b38a8' : '#d9e6ff';
+      this.ctx.beginPath();
+      this.ctx.arc(0, -24, 30, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#10172e';
+      this.ctx.beginPath();
+      this.ctx.ellipse(8, -26, 20, 12, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = special ? '#9b5cff' : '#eef5ff';
+      this.ctx.fillRect(-22, 8, 44, 58);
+      this.ctx.strokeStyle = special ? '#d9a6ff' : '#8db7ff';
+      this.ctx.lineWidth = 5;
+      this.ctx.strokeRect(-22, 8, 44, 58);
+      this.ctx.restore();
+    }
+
+    drawMoonLordBoss(p, boss) {
+      this.ctx.shadowColor = boss.phase === 2 ? '#ff56d8' : '#ffd7fa';
+      this.ctx.shadowBlur = 24;
+      this.ctx.fillStyle = 'rgba(255, 245, 210, 0.28)';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x + 26, p.y - 24, 88, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = boss.phase === 2 ? '#ff74d8' : '#ffd7fa';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y - 32, 26, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = boss.phase === 2 ? '#8a2d8f' : '#8f6bb7';
+      this.ctx.beginPath();
+      this.ctx.ellipse(p.x, p.y + 22, 42, 58, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.strokeStyle = '#ffffff';
+      this.ctx.lineWidth = 2;
+      for (let i = 0; i < 12; i += 1) {
+        const a = i * Math.PI / 6 + performance.now() / 1200;
+        this.ctx.beginPath();
+        this.ctx.moveTo(p.x + Math.cos(a) * 62, p.y + Math.sin(a) * 62);
+        this.ctx.lineTo(p.x + Math.cos(a) * 80, p.y + Math.sin(a) * 80);
+        this.ctx.stroke();
+      }
+      this.ctx.shadowBlur = 0;
+    }
+
     drawRewards(state, viewport) {
       for (const chest of state.chests) {
         const p = this.worldToScreen(chest, state, viewport);
@@ -451,6 +560,18 @@
           this.ctx.fillStyle = 'rgba(255,90,30,0.85)';
           this.ctx.beginPath();
           this.ctx.arc(-10, 0, 4, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else if (projectile.kind === 'badqMain' || projectile.kind === 'badqShard') {
+          this.ctx.fillStyle = projectile.color;
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, projectile.kind === 'badqMain' ? 6 : 3, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else if (projectile.kind === 'heart') {
+          this.ctx.fillStyle = '#ff8edb';
+          this.ctx.beginPath();
+          this.ctx.moveTo(p.x, p.y + 5);
+          this.ctx.bezierCurveTo(p.x - 14, p.y - 5, p.x - 4, p.y - 16, p.x, p.y - 6);
+          this.ctx.bezierCurveTo(p.x + 4, p.y - 16, p.x + 14, p.y - 5, p.x, p.y + 5);
           this.ctx.fill();
         } else if (projectile.kind === 'sniper') {
           this.ctx.strokeStyle = '#d8fbff';

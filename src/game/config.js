@@ -49,6 +49,7 @@
     grass: { label: '普通草地', background: '#a8e46d', grid: 'rgba(43, 116, 53, 0.12)', decoration: '#7cca50' },
     desert: { label: '沙漠', background: '#e8c06a', grid: 'rgba(139, 92, 33, 0.13)', decoration: '#d4a653' },
     ice: { label: '冰雪之地', background: '#d8f6ff', grid: 'rgba(61, 139, 181, 0.16)', decoration: '#9adfff' },
+    space: { label: '宇航世界', background: '#070b24', grid: 'rgba(124, 110, 255, 0.22)', decoration: '#f8fbff' },
   });
 
   const XP_BEAN_TYPES = Object.freeze({
@@ -97,6 +98,7 @@
     laser: { label: '激光塔', rarity: 'legendary', range: 350, fireRate: 4, damage: 1.8, color: '#ff5cf4', kind: 'laser', unique: true },
     missile: { label: '导弹塔', rarity: 'epic', range: 650, fireRate: 0.4, damage: 8, splashDamage: 4, explosionRadius: 80, color: '#ffcf5c', kind: 'missile', projectileSpeed: 180, turnRate: 2.1, ttl: 4 },
     sniper: { label: '狙击枪', rarity: 'epic', range: 1300, fireRate: 0.2, damage: 200, color: '#b7f3ff', kind: 'sniper', projectileSpeed: 1200 },
+    badq: { label: '霸带枪', rarity: 'epic', range: 500, fireRate: 1 / 3, damage: 1, color: '#d56cff', kind: 'badq', projectileSpeed: 300, splitAfter: 2, splitCount: 5 },
   });
 
   const RARITY_WEIGHTS = Object.freeze({ common: 60, rare: 25, epic: 12, legendary: 3 });
