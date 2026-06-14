@@ -74,6 +74,8 @@
       iceZones: createIceZones(),
       effects: [],
       bossWarnings: [],
+      fireZones: [],
+      toxicFogs: [],
       bosses: createBosses(),
       poisonZones: createPoisonZones(),
       projectiles: [],
@@ -139,28 +141,48 @@
     ];
   }
 
+  const BOSS_DEFS = Object.freeze({
+    mushroom: { label: '毒蘑菇 Boss', hp: 1500, respawn: 120, color: '#c84b73', range: 900 },
+    core: { label: '机械能量核心 Boss', hp: 2200, respawn: 150, color: '#67d8ff', range: 1000, rotateSpeed: Math.PI / 6 },
+    flame: { label: '火焰人 Boss', hp: 2800, respawn: 180, color: '#ff6b2f', range: 1000, speed: 120 },
+    viper: { label: '毒蛇 Boss', hp: 4000, respawn: 240, color: '#3fba52', range: 1000, speed: 140 },
+  });
+
   function createBosses() {
     return [
-      createBoss('boss-1', 760, 3260),
-      createBoss('boss-2', 3260, 760),
+      createBoss('boss-mushroom-1', 'mushroom', 760, 3260),
+      createBoss('boss-mushroom-2', 'mushroom', 3260, 760),
+      createBoss('boss-core', 'core', 3300, 3300),
+      createBoss('boss-flame', 'flame', 520, 560),
+      createBoss('boss-viper', 'viper', 2100, 650),
     ];
   }
 
-  function createBoss(id, x, y) {
+  function createBoss(id, type, x, y) {
+    const def = BOSS_DEFS[type];
     return {
       id,
+      type,
+      name: def.label,
       x,
       y,
-      hp: C.BOSS_CONFIG.hp,
-      maxHp: C.BOSS_CONFIG.hp,
+      spawnX: x,
+      spawnY: y,
+      hp: def.hp,
+      maxHp: def.hp,
       alive: true,
       respawnTimer: 0,
       attackTimer: randomRange(0.2, C.BOSS_CONFIG.attackInterval),
       ringTimer: randomRange(2, C.BOSS_CONFIG.ringInterval),
       spitTimer: randomRange(0.5, C.BOSS_CONFIG.spitInterval),
       aoeTimer: randomRange(3, C.BOSS_CONFIG.aoeInterval),
+      specialTimer: randomRange(2, 6),
+      trailTimer: 0,
+      dashTimer: 0,
+      dashCooldown: 6,
       aoeWarning: 0,
       angle: 0,
+      rotation: 0,
     };
   }
 
@@ -201,6 +223,7 @@
     updateEffects(state, dt);
     updateTerrainEffects(state, dt);
     updateVisualEffects(state, dt);
+    updateBossHazards(state, dt);
     moveSnakes(state, dt);
     updateBeans(state, dt);
     collectBeans(state);
@@ -659,6 +682,12 @@
       const projectile = state.projectiles[index];
       const owner = state.snakes.find((snake) => snake.id === projectile.ownerId);
       if (projectile.kind === 'missile') steerMissile(state, projectile, dt);
+      if (projectile.wave !== undefined) {
+        projectile.angle = Math.atan2(projectile.vy, projectile.vx) + Math.sin(state.elapsed * 6 + projectile.wave) * 0.035;
+        const speed = Math.hypot(projectile.vx, projectile.vy);
+        projectile.vx = Math.cos(projectile.angle) * speed;
+        projectile.vy = Math.sin(projectile.angle) * speed;
+      }
       projectile.x = wrap(projectile.x + projectile.vx * dt);
       projectile.y = wrap(projectile.y + projectile.vy * dt);
       projectile.ttl -= dt;
@@ -686,7 +715,11 @@
       if (hit) {
         if (projectile.kind === 'missile') explodeProjectile(state, projectile, owner);
         else {
-          applyDamage(state, hit.snake, hit.segmentIndex, projectile.damage, owner, projectile.kind);
+          applyDamage(state, hit.snake, hit.segmentIndex, projectile.percentDamage ? hit.snake.segments[hit.segmentIndex].maxHp * projectile.percentDamage : projectile.damage, owner, projectile.kind || 'bossBullet');
+          if (projectile.burn && hit.snake.segments[hit.segmentIndex]) {
+            hit.snake.segments[hit.segmentIndex].burn = Math.max(hit.snake.segments[hit.segmentIndex].burn || 0, projectile.burn);
+            hit.snake.segments[hit.segmentIndex].burnTick = 0;
+          }
           addEffect(state, projectile.kind === 'shotgun' ? 'sparkBig' : 'spark', projectile.x, projectile.y, projectile.color);
           state.events.push({ type: 'hit', player: owner?.isPlayer });
         }
@@ -924,56 +957,243 @@
     }
   }
 
+
+  function updateBossHazards(state, dt) {
+    updateZoneDamage(state, state.fireZones, dt, 'fireZone');
+    updateZoneDamage(state, state.toxicFogs, dt, 'toxicFog');
+  }
+
+  function updateZoneDamage(state, zones, dt, kind) {
+    for (let z = zones.length - 1; z >= 0; z -= 1) {
+      const zone = zones[z];
+      zone.ttl -= dt;
+      if (zone.ttl <= 0) {
+        zones.splice(z, 1);
+        continue;
+      }
+      zone.tick = (zone.tick || 0) + dt;
+      if (zone.tick < 1) continue;
+      zone.tick = 0;
+      for (const snake of state.snakes) {
+        if (!snake.alive || snake.effects.invincible > 0) continue;
+        const points = getSnakeSegments(snake);
+        for (let i = points.length - 1; i >= 0; i -= 1) {
+          if (!snake.segments[i]) continue;
+          if (distance(points[i], zone) <= zone.radius) applyDamage(state, snake, i, zone.damage, null, kind);
+        }
+      }
+    }
+  }
+
   function updateBosses(state, dt) {
     for (const boss of state.bosses) {
       if (!boss.alive) {
         boss.respawnTimer -= dt;
-        if (boss.respawnTimer <= 0) {
-          boss.alive = true;
-          boss.hp = boss.maxHp;
-        }
+        if (boss.respawnTimer <= 0) respawnBoss(boss);
         continue;
       }
-      const target = findNearestSnake(state, boss, C.BOSS_CONFIG.range);
+      const def = BOSS_DEFS[boss.type];
+      const target = findNearestSnake(state, boss, def.range || C.BOSS_CONFIG.range);
       if (target) boss.angle = angleTo(boss, target);
-      boss.attackTimer -= dt;
-      boss.ringTimer -= dt;
-      boss.spitTimer -= dt;
-      boss.aoeTimer -= dt;
-      if (boss.aoeWarning > 0) boss.aoeWarning = Math.max(0, boss.aoeWarning - dt);
-      if (boss.aoeTimer <= C.BOSS_CONFIG.aoeWarningSeconds && boss.aoeWarning <= 0) {
-        boss.aoeWarning = C.BOSS_CONFIG.aoeWarningSeconds;
-        state.bossWarnings.push({ bossId: boss.id, x: boss.x, y: boss.y, radius: C.BOSS_CONFIG.aoeRadius, timer: C.BOSS_CONFIG.aoeWarningSeconds, duration: C.BOSS_CONFIG.aoeWarningSeconds });
-        if (isPlayerNear(state, boss, C.BOSS_CONFIG.aoeRadius + 80)) state.events.push({ type: 'bossWarn', player: true });
-      }
-      if (target && boss.attackTimer <= 0) {
-        fireBossBullet(state, boss, target, C.BOSS_CONFIG.bulletDamage, C.BOSS_CONFIG.bulletSpeed);
-        boss.attackTimer = C.BOSS_CONFIG.attackInterval;
-      }
-      if (boss.ringTimer <= 0) {
-        for (let i = 0; i < C.BOSS_CONFIG.ringCount; i += 1) {
-          const angle = (Math.PI * 2 * i) / C.BOSS_CONFIG.ringCount;
-          fireBossBulletAtAngle(state, boss, angle, C.BOSS_CONFIG.ringDamage, C.BOSS_CONFIG.bulletSpeed * 0.85);
-        }
-        boss.ringTimer = C.BOSS_CONFIG.ringInterval;
-      }
+      if (boss.type === 'mushroom') updateMushroomBoss(state, boss, target, dt);
+      if (boss.type === 'core') updateCoreBoss(state, boss, target, dt);
+      if (boss.type === 'flame') updateFlameBoss(state, boss, target, dt);
+      if (boss.type === 'viper') updateViperBoss(state, boss, target, dt);
       if (boss.spitTimer <= 0) {
         spitBossXp(state, boss);
-        boss.spitTimer = C.BOSS_CONFIG.spitInterval;
+        boss.spitTimer = boss.type === 'mushroom' ? C.BOSS_CONFIG.spitInterval : C.BOSS_CONFIG.spitInterval * 1.4;
       }
-      if (boss.aoeTimer <= 0) {
-        resolveBossAoe(state, boss);
-        boss.aoeTimer = C.BOSS_CONFIG.aoeInterval;
-        boss.aoeWarning = 0;
+    }
+  }
+
+  function respawnBoss(boss) {
+    const def = BOSS_DEFS[boss.type];
+    boss.alive = true;
+    boss.hp = boss.maxHp;
+    boss.x = boss.spawnX;
+    boss.y = boss.spawnY;
+    boss.respawnTimer = 0;
+    boss.attackTimer = randomRange(0.2, C.BOSS_CONFIG.attackInterval);
+    boss.ringTimer = randomRange(2, C.BOSS_CONFIG.ringInterval);
+    boss.spitTimer = randomRange(0.5, C.BOSS_CONFIG.spitInterval);
+    boss.aoeTimer = randomRange(3, boss.type === 'core' ? 10 : C.BOSS_CONFIG.aoeInterval);
+    boss.specialTimer = randomRange(2, 6);
+    boss.dashCooldown = boss.type === 'viper' ? 5 : 8;
+    boss.maxHp = def.hp;
+  }
+
+  function updateMushroomBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.ringTimer -= dt;
+    boss.spitTimer -= dt;
+    boss.aoeTimer -= dt;
+    if (boss.aoeWarning > 0) boss.aoeWarning = Math.max(0, boss.aoeWarning - dt);
+    if (boss.aoeTimer <= C.BOSS_CONFIG.aoeWarningSeconds && boss.aoeWarning <= 0) {
+      boss.aoeWarning = C.BOSS_CONFIG.aoeWarningSeconds;
+      state.bossWarnings.push({ bossId: boss.id, x: boss.x, y: boss.y, radius: C.BOSS_CONFIG.aoeRadius, timer: C.BOSS_CONFIG.aoeWarningSeconds, duration: C.BOSS_CONFIG.aoeWarningSeconds, damageRatio: C.BOSS_CONFIG.aoeDamageRatio, color: '#ff3b3b' });
+      if (isPlayerNear(state, boss, C.BOSS_CONFIG.aoeRadius + 80)) state.events.push({ type: 'bossWarn', player: true });
+    }
+    if (target && boss.attackTimer <= 0) {
+      fireBossBullet(state, boss, target, C.BOSS_CONFIG.bulletDamage, C.BOSS_CONFIG.bulletSpeed, '#b245ff');
+      boss.attackTimer = C.BOSS_CONFIG.attackInterval;
+    }
+    if (boss.ringTimer <= 0) {
+      for (let i = 0; i < C.BOSS_CONFIG.ringCount; i += 1) fireBossBulletAtAngle(state, boss, (Math.PI * 2 * i) / C.BOSS_CONFIG.ringCount, C.BOSS_CONFIG.ringDamage, C.BOSS_CONFIG.bulletSpeed * 0.85, '#b245ff');
+      boss.ringTimer = C.BOSS_CONFIG.ringInterval;
+    }
+    if (boss.aoeTimer <= 0) {
+      boss.aoeTimer = C.BOSS_CONFIG.aoeInterval;
+      boss.aoeWarning = 0;
+    }
+  }
+
+  function updateCoreBoss(state, boss, target, dt) {
+    boss.rotation += BOSS_DEFS.core.rotateSpeed * dt;
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.spitTimer -= dt;
+    if (boss.attackTimer <= 0) {
+      for (let i = 0; i < 8; i += 1) fireBossBulletAtAngle(state, boss, boss.rotation + i * Math.PI / 4, 0, 320, '#67d8ff', 0.1);
+      boss.attackTimer = 1.2;
+    }
+    if (target && boss.aoeTimer <= 1.6) {
+      const point = randomPointNear(target, 260);
+      state.bossWarnings.push({ bossId: boss.id, x: point.x, y: point.y, radius: 250, timer: 1.6, duration: 1.6, damageRatio: 0.8, color: '#ff4545' });
+      if (isPlayerNear(state, point, 330)) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 10;
+    }
+  }
+
+  function updateFlameBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.spitTimer -= dt;
+    moveBossToward(state, boss, target, dt, BOSS_DEFS.flame.speed, 300);
+    boss.trailTimer -= dt;
+    if (boss.trailTimer <= 0) {
+      state.fireZones.push({ x: boss.x, y: boss.y, radius: 60, ttl: 10, damage: 5 });
+      boss.trailTimer = 0.25;
+    }
+    if (target && boss.attackTimer <= 0) {
+      for (let i = 0; i < 10; i += 1) {
+        const p = randomPointNear(target, 300);
+        fireBossBulletAtAngle(state, boss, angleTo(boss, p), 0, 420, '#ff7a22', 0.05, { burn: 10, burnDps: 3 });
+      }
+      boss.attackTimer = 6;
+    }
+    if (target && boss.aoeTimer <= 0) {
+      for (let i = 0; i < 10; i += 1) {
+        const p = randomPointNear(target, 260);
+        state.bossWarnings.push({ bossId: boss.id, x: p.x, y: p.y, radius: 70, timer: 1.5, duration: 1.5, damageRatio: 0.8, burn: 5, burnDps: 2, color: '#ff4b23' });
+      }
+      if (target.isPlayer) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 11;
+    }
+  }
+
+  function updateViperBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.specialTimer -= dt;
+    boss.dashCooldown -= dt;
+    boss.spitTimer -= dt;
+    if (boss.dashTimer > 0) {
+      boss.dashTimer -= dt;
+      boss.x = wrap(boss.x + Math.cos(boss.angle) * 560 * dt);
+      boss.y = wrap(boss.y + Math.sin(boss.angle) * 560 * dt);
+      damageSnakesNearPoint(state, boss, 70, 50, 'viperDash', 10, 2);
+      return;
+    }
+    moveBossToward(state, boss, target, dt, BOSS_DEFS.viper.speed, 360);
+    if (target && boss.attackTimer <= 0) {
+      for (let i = 0; i < 10; i += 1) fireBossBulletAtAngle(state, boss, boss.angle + i * 0.36, 0, 260, '#55e45f', 0.1, { wave: i * 0.5 });
+      boss.attackTimer = 6;
+    }
+    if (target && boss.aoeTimer <= 0) {
+      const p = randomPointNear(target, 260);
+      state.bossWarnings.push({ bossId: boss.id, x: p.x, y: p.y, radius: 300, timer: 1.5, duration: 1.5, toxicFog: true, color: '#55cc55' });
+      if (target.isPlayer) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 12;
+    }
+    if (target && boss.dashCooldown <= 0) {
+      boss.angle = angleTo(boss, target);
+      boss.dashTimer = 1.2;
+      boss.dashCooldown = 8;
+      if (target.isPlayer && distance(boss, target) < 900) state.events.push({ type: 'bossWarn', player: true });
+    }
+  }
+
+  function updateBossWarnings(state, dt) {
+    for (let index = state.bossWarnings.length - 1; index >= 0; index -= 1) {
+      const warning = state.bossWarnings[index];
+      warning.timer -= dt;
+      if (warning.timer <= 0) {
+        if (warning.toxicFog) state.toxicFogs.push({ x: warning.x, y: warning.y, radius: warning.radius, ttl: 10, damage: 10 });
+        else resolveWarningAoe(state, warning);
+        state.bossWarnings.splice(index, 1);
       }
     }
   }
 
 
-  function updateBossWarnings(state, dt) {
-    for (let index = state.bossWarnings.length - 1; index >= 0; index -= 1) {
-      state.bossWarnings[index].timer -= dt;
-      if (state.bossWarnings[index].timer <= 0) state.bossWarnings.splice(index, 1);
+  function resolveWarningAoe(state, warning) {
+    addEffect(state, 'bossAoe', warning.x, warning.y, warning.color || '#ff3b3b', warning.radius);
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.effects.invincible > 0) continue;
+      const points = getSnakeSegments(snake);
+      for (let i = points.length - 1; i >= 0; i -= 1) {
+        const segment = snake.segments[i];
+        if (!segment) continue;
+        if (distance(points[i], warning) <= warning.radius && !lineBlockedByObstacle(state, warning, points[i])) {
+          applyDamage(state, snake, i, segment.maxHp * (warning.damageRatio || C.BOSS_CONFIG.aoeDamageRatio), null, 'bossAoe');
+          if (warning.burn && snake.segments[i]) {
+            snake.segments[i].burn = Math.max(snake.segments[i].burn || 0, warning.burn);
+            snake.segments[i].burnTick = 0;
+          }
+          if (snake.isPlayer) state.events.push({ type: 'bossAoeHit', player: true });
+        }
+      }
+    }
+  }
+
+  function randomPointNear(point, radius) {
+    const angle = randomRange(0, Math.PI * 2);
+    const r = Math.sqrt(Math.random()) * radius;
+    return { x: wrap(point.x + Math.cos(angle) * r), y: wrap(point.y + Math.sin(angle) * r) };
+  }
+
+  function moveBossToward(state, boss, target, dt, speed, stopDistance) {
+    if (!target) return;
+    const d = distance(boss, target);
+    if (d <= stopDistance) return;
+    boss.angle = angleTo(boss, target);
+    boss.x = wrap(boss.x + Math.cos(boss.angle) * speed * dt);
+    boss.y = wrap(boss.y + Math.sin(boss.angle) * speed * dt);
+    for (const obstacle of state.obstacles) {
+      const od = distance(boss, obstacle);
+      const minDistance = 54 + obstacle.radius;
+      if (od > 0 && od < minDistance) {
+        const angle = angleTo(obstacle, boss);
+        boss.x = wrap(obstacle.x + Math.cos(angle) * minDistance);
+        boss.y = wrap(obstacle.y + Math.sin(angle) * minDistance);
+      }
+    }
+  }
+
+  function damageSnakesNearPoint(state, point, radius, damage, kind, poisonDuration = 0, poisonDps = 0) {
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.effects.invincible > 0) continue;
+      const points = getSnakeSegments(snake);
+      for (let i = points.length - 1; i >= 0; i -= 1) {
+        if (!snake.segments[i]) continue;
+        if (distance(points[i], point) <= radius) {
+          applyDamage(state, snake, i, damage, null, kind);
+          if (poisonDuration && snake.segments[i]) {
+            snake.segments[i].burn = Math.max(snake.segments[i].burn || 0, poisonDuration);
+            snake.segments[i].burnTick = 0;
+          }
+        }
+      }
     }
   }
 
@@ -1012,12 +1232,12 @@
     return best;
   }
 
-  function fireBossBullet(state, boss, target, damage, speed) {
-    fireBossBulletAtAngle(state, boss, angleTo(boss, target), damage, speed);
+  function fireBossBullet(state, boss, target, damage, speed, color = '#b245ff', percentDamage = 0, extra = {}) {
+    fireBossBulletAtAngle(state, boss, angleTo(boss, target), damage, speed, color, percentDamage, extra);
   }
 
-  function fireBossBulletAtAngle(state, boss, angle, damage, speed) {
-    state.projectiles.push({ id: `projectile-${nextProjectileId++}`, boss: true, ownerId: boss.id, x: boss.x, y: boss.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, ttl: 3, color: '#b245ff' });
+  function fireBossBulletAtAngle(state, boss, angle, damage, speed, color = '#b245ff', percentDamage = 0, extra = {}) {
+    state.projectiles.push({ id: `projectile-${nextProjectileId++}`, boss: true, ownerId: boss.id, x: boss.x, y: boss.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, angle, damage, percentDamage, ttl: 3.2, color, ...extra });
     state.events.push({ type: 'bossShoot' });
   }
 
@@ -1035,19 +1255,20 @@
     state.events.push({ type: 'bossHit', player: sourceSnake?.isPlayer });
     if (boss.hp > 0) return;
     boss.alive = false;
-    boss.respawnTimer = C.BOSS_CONFIG.respawnSeconds;
+    boss.respawnTimer = BOSS_DEFS[boss.type]?.respawn || C.BOSS_CONFIG.respawnSeconds;
     if (sourceSnake?.isPlayer) state.stats.bossKills += 1;
     dropBossRewards(state, boss);
     state.events.push({ type: 'bossDeath' });
   }
 
   function dropBossRewards(state, boss) {
-    for (let i = 0; i < 30; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp1', 260));
-    for (let i = 0; i < 20; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp5', 250));
-    for (let i = 0; i < 12; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp10', 230));
-    for (let i = 0; i < 8; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp20', 220));
-    for (let i = 0; i < 4; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp50', 200));
-    state.chests.push(createChestNear(boss.x, boss.y), createChestNear(boss.x, boss.y));
+    const reward = boss.type === 'viper' ? [80, 50, 35, 24, 14, 3] : boss.type === 'flame' ? [55, 35, 24, 16, 8, 2] : boss.type === 'core' ? [45, 25, 16, 10, 5, 2] : [30, 20, 12, 8, 4, 2];
+    for (let i = 0; i < reward[0]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp1', 260));
+    for (let i = 0; i < reward[1]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp5', 250));
+    for (let i = 0; i < reward[2]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp10', 230));
+    for (let i = 0; i < reward[3]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp20', 220));
+    for (let i = 0; i < reward[4]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp50', 200));
+    for (let i = 0; i < reward[5]; i += 1) state.chests.push(createChestNear(boss.x, boss.y));
     if (Math.random() < 0.1) state.powerups.push(createPowerupNear(boss.x, boss.y, 'invincible'));
     if (Math.random() < 0.1) state.powerups.push(createPowerupNear(boss.x, boss.y, 'giant'));
   }

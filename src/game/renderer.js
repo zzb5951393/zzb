@@ -20,6 +20,7 @@
     render(state, viewport) {
       this.drawBackground(state, viewport);
       this.drawPoisonZones(state, viewport);
+      this.drawBossHazards(state, viewport);
       this.drawIceZones(state, viewport);
       this.drawObstacles(state, viewport);
       this.drawBossWarnings(state, viewport);
@@ -95,6 +96,33 @@
     }
 
 
+
+    drawBossHazards(state, viewport) {
+      for (const zone of state.fireZones || []) {
+        const p = this.worldToScreen(zone, state, viewport);
+        if (!isVisible(p, zone.radius + 20, viewport)) continue;
+        const g = this.ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, zone.radius);
+        g.addColorStop(0, 'rgba(255, 205, 64, 0.45)');
+        g.addColorStop(0.55, 'rgba(255, 86, 24, 0.28)');
+        g.addColorStop(1, 'rgba(255, 30, 0, 0)');
+        this.ctx.fillStyle = g;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, zone.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+      for (const fog of state.toxicFogs || []) {
+        const p = this.worldToScreen(fog, state, viewport);
+        if (!isVisible(p, fog.radius + 20, viewport)) continue;
+        const g = this.ctx.createRadialGradient(p.x, p.y, fog.radius * 0.15, p.x, p.y, fog.radius);
+        g.addColorStop(0, 'rgba(50, 126, 54, 0.55)');
+        g.addColorStop(1, 'rgba(35, 92, 45, 0.05)');
+        this.ctx.fillStyle = g;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, fog.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
     drawIceZones(state, viewport) {
       for (const zone of state.iceZones || []) {
         const p = this.worldToScreen(zone, state, viewport);
@@ -161,33 +189,109 @@
       for (const boss of state.bosses) {
         if (!boss.alive) continue;
         const p = this.worldToScreen(boss, state, viewport);
-        if (!isVisible(p, 110, viewport)) continue;
-        this.ctx.fillStyle = 'rgba(88, 24, 112, 0.2)';
-        this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, 88, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.fillStyle = '#7b3f2f';
-        this.ctx.beginPath();
-        this.ctx.ellipse(p.x, p.y + 30, 24, 42, 0, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.fillStyle = '#c84b73';
-        this.ctx.beginPath();
-        this.ctx.arc(p.x, p.y, 54, Math.PI, Math.PI * 2);
-        this.ctx.quadraticCurveTo(p.x + 62, p.y + 22, p.x, p.y + 30);
-        this.ctx.quadraticCurveTo(p.x - 62, p.y + 22, p.x - 54, p.y);
-        this.ctx.fill();
-        this.ctx.fillStyle = '#ffd7e2';
-        for (let i = 0; i < 7; i += 1) {
-          const angle = i * 1.7;
-          this.ctx.beginPath();
-          this.ctx.arc(p.x + Math.cos(angle) * 28, p.y - 8 + Math.sin(angle) * 14, 6, 0, Math.PI * 2);
-          this.ctx.fill();
-        }
+        if (!isVisible(p, 130, viewport)) continue;
+        if (boss.type === 'core') this.drawCoreBoss(p, boss);
+        else if (boss.type === 'flame') this.drawFlameBoss(p, boss);
+        else if (boss.type === 'viper') this.drawViperBoss(p, boss);
+        else this.drawMushroomBoss(p);
         this.ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        this.ctx.fillRect(p.x - 55, p.y - 78, 110, 8);
-        this.ctx.fillStyle = '#ff5c86';
-        this.ctx.fillRect(p.x - 55, p.y - 78, 110 * Math.max(0, boss.hp / boss.maxHp), 8);
+        this.ctx.fillRect(p.x - 62, p.y - 82, 124, 9);
+        this.ctx.fillStyle = boss.type === 'viper' ? '#6dff79' : boss.type === 'flame' ? '#ff8a42' : boss.type === 'core' ? '#67d8ff' : '#ff5c86';
+        this.ctx.fillRect(p.x - 62, p.y - 82, 124 * Math.max(0, boss.hp / boss.maxHp), 9);
       }
+    }
+
+    drawMushroomBoss(p) {
+      this.ctx.fillStyle = 'rgba(88, 24, 112, 0.2)';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, 88, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#7b3f2f';
+      this.ctx.beginPath();
+      this.ctx.ellipse(p.x, p.y + 30, 24, 42, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#c84b73';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, 54, Math.PI, Math.PI * 2);
+      this.ctx.quadraticCurveTo(p.x + 62, p.y + 22, p.x, p.y + 30);
+      this.ctx.quadraticCurveTo(p.x - 62, p.y + 22, p.x - 54, p.y);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#ffd7e2';
+      for (let i = 0; i < 7; i += 1) {
+        const angle = i * 1.7;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x + Math.cos(angle) * 28, p.y - 8 + Math.sin(angle) * 14, 6, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
+    drawCoreBoss(p, boss) {
+      this.ctx.save();
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate(boss.rotation || 0);
+      this.ctx.fillStyle = '#4b5564';
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, 58, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.strokeStyle = '#a9b3c7';
+      this.ctx.lineWidth = 8;
+      this.ctx.stroke();
+      for (let i = 0; i < 8; i += 1) {
+        const a = i * Math.PI / 4;
+        this.ctx.fillStyle = '#26313d';
+        this.ctx.fillRect(Math.cos(a) * 54 - 6, Math.sin(a) * 54 - 6, 20, 12);
+      }
+      this.ctx.rotate(-(boss.rotation || 0));
+      this.ctx.shadowColor = '#67d8ff';
+      this.ctx.shadowBlur = 18;
+      this.ctx.fillStyle = '#67d8ff';
+      this.ctx.beginPath();
+      this.ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.restore();
+      this.ctx.shadowBlur = 0;
+    }
+
+    drawFlameBoss(p, boss) {
+      this.ctx.shadowColor = '#ff7a22';
+      this.ctx.shadowBlur = 18;
+      this.ctx.fillStyle = '#ff6b2f';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y - 22, 34, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#d83b21';
+      this.ctx.beginPath();
+      this.ctx.ellipse(p.x, p.y + 25, 36, 48, boss.angle || 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#ffd36a';
+      for (let i = 0; i < 8; i += 1) {
+        const a = performance.now() / 220 + i;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x + Math.cos(a) * 48, p.y + Math.sin(a) * 38, 5, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+      this.ctx.shadowBlur = 0;
+    }
+
+    drawViperBoss(p, boss) {
+      const angle = boss.angle || 0;
+      for (let i = 7; i >= 0; i -= 1) {
+        const x = p.x - Math.cos(angle) * i * 22;
+        const y = p.y - Math.sin(angle) * i * 22;
+        this.ctx.fillStyle = i === 0 ? '#2b7d35' : '#235c34';
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, i === 0 ? 34 : 25, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = 'rgba(185, 88, 255, 0.45)';
+        this.ctx.beginPath();
+        this.ctx.arc(x - 7, y - 6, 6, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+      this.ctx.fillStyle = '#d6ff6b';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x + Math.cos(angle + 0.45) * 18, p.y + Math.sin(angle + 0.45) * 18, 5, 0, Math.PI * 2);
+      this.ctx.arc(p.x + Math.cos(angle - 0.45) * 18, p.y + Math.sin(angle - 0.45) * 18, 5, 0, Math.PI * 2);
+      this.ctx.fill();
     }
 
     drawRewards(state, viewport) {
