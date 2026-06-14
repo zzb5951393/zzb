@@ -10,6 +10,7 @@
   const canvas = document.querySelector('#game-canvas');
   const viewportSelect = document.querySelector('#viewport-select');
   const themeSelect = document.querySelector('#theme-select');
+  const chapterSelect = document.querySelector('#chapter-select');
   const modal = document.querySelector('#modal');
   const cardModal = document.querySelector('#card-modal');
   const cardOptions = document.querySelector('#card-options');
@@ -79,7 +80,7 @@
 
   function startGame() {
     applySettings();
-    game = Game.createGame({ theme: themeSelect.value, viewportWidth: viewport.width, viewportHeight: viewport.height });
+    game = Game.createGame({ chapter: chapterSelect.value, theme: themeSelect.value, viewportWidth: viewport.width, viewportHeight: viewport.height });
     menuScreen.classList.add('is-hidden');
     settingsPanel.classList.add('is-hidden');
     modal.classList.add('is-hidden');

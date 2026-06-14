@@ -26,6 +26,7 @@
     { id: 'flame', title: '火焰炮塔', rarity: 'rare', desc: '获得 1 个近中距离扇形燃烧炮塔', type: 'turret', turret: 'flame' },
     { id: 'laser', title: '激光塔', rarity: 'legendary', desc: '获得 1 个短中距离精准激光塔', type: 'turret', turret: 'laser' },
     { id: 'missile', title: '导弹塔', rarity: 'epic', desc: '获得 1 座慢速追踪爆炸导弹塔', type: 'turret', turret: 'missile' },
+    { id: 'sniper', title: '狙击枪', rarity: 'epic', desc: '每 5 秒发射高伤子弹并附加火力虚弱', type: 'turret', turret: 'sniper' },
     { id: 'ammo', title: '强化弹药', rarity: 'rare', desc: '所有炮塔伤害 +10%', type: 'mod', key: 'damageBonus', amount: 0.1, max: 1 },
     { id: 'reload', title: '快速装填', rarity: 'rare', desc: '所有炮塔攻速 +10%', type: 'mod', key: 'fireRateBonus', amount: 0.1, max: 0.75 },
     { id: 'range', title: '扩大射程', rarity: 'common', desc: '所有炮塔射程 +10%', type: 'mod', key: 'rangeBonus', amount: 0.1, max: 0.75 },
@@ -62,7 +63,8 @@
     const state = {
       status: 'playing',
       result: null,
-      theme: options.theme || 'grass',
+      theme: options.chapter === 'chapter2' ? 'ice' : (options.theme || 'grass'),
+      chapter: options.chapter || 'chapter1',
       elapsed: 0,
       continuedAfterWin: false,
       stats: { enemyXp: 0, enemyKills: 0, enemyLevelUps: 0, bossKills: 0 },
@@ -70,13 +72,15 @@
       beans: [],
       chests: [],
       powerups: [],
-      obstacles: createObstacles(),
-      iceZones: createIceZones(),
+      obstacles: createObstacles(options.chapter || 'chapter1'),
+      iceZones: createIceZones(options.chapter || 'chapter1'),
+      iceSpikes: createIceSpikes(options.chapter || 'chapter1'),
+      iceTornados: createIceTornados(options.chapter || 'chapter1'),
       effects: [],
       bossWarnings: [],
       fireZones: [],
       toxicFogs: [],
-      bosses: createBosses(),
+      bosses: createBosses(options.chapter || 'chapter1'),
       poisonZones: createPoisonZones(),
       projectiles: [],
       lasers: [],
@@ -120,6 +124,13 @@
       inPoison: false,
       wasInPoison: false,
       chilledTimer: 0,
+      freezeTimer: 0,
+      hardSlowTimer: 0,
+      hardSlowMultiplier: 1,
+      turnSlowTimer: 0,
+      turnSlowMultiplier: 1,
+      damageWeakness: 0,
+      trapCooldown: 0,
       wasIced: false,
       headDamaged: false,
       mods: { damageBonus: 0, fireRateBonus: 0, rangeBonus: 0, speedBonus: 0, boostRegenBonus: 0, xpBonus: 0, armorBonus: 0, regenBonus: 0, regenDelayReduction: 0, combatRegen: 0, headRepairBonus: 0, tailRegenBonus: 0, magnetStacks: 0, shotgunBonus: 0 },
@@ -146,9 +157,19 @@
     core: { label: '机械能量核心 Boss', hp: 2200, respawn: 150, color: '#67d8ff', range: 1000, rotateSpeed: Math.PI / 6 },
     flame: { label: '火焰人 Boss', hp: 2800, respawn: 180, color: '#ff6b2f', range: 1000, speed: 120 },
     viper: { label: '毒蛇 Boss', hp: 4000, respawn: 240, color: '#3fba52', range: 1000, speed: 140 },
+    iceBreath: { label: '冰雪之息', hp: 4000, respawn: 170, color: '#9eeaff', range: 1200 },
+    iceQueen: { label: '冰雪女皇', hp: 5000, respawn: 190, color: '#88bfff', range: 1000 },
+    iceGod: { label: '冰雪之神', hp: 8000, respawn: 260, color: '#e8fbff', range: 2000 },
   });
 
-  function createBosses() {
+  function createBosses(chapter = 'chapter1') {
+    if (chapter === 'chapter2') {
+      return [
+        createBoss('boss-ice-breath', 'iceBreath', 760, 3260),
+        createBoss('boss-ice-queen', 'iceQueen', 3260, 760),
+        createBoss('boss-ice-god', 'iceGod', 2100, 2100),
+      ];
+    }
     return [
       createBoss('boss-mushroom-1', 'mushroom', 760, 3260),
       createBoss('boss-mushroom-2', 'mushroom', 3260, 760),
@@ -188,7 +209,7 @@
 
 
 
-  function createObstacles() {
+  function createObstacles(chapter = 'chapter1') {
     const fixed = [
       { x: 620, y: 3200, radius: 72, kind: 'rock' }, { x: 960, y: 3020, radius: 48, kind: 'stump' },
       { x: 3340, y: 760, radius: 66, kind: 'rock' }, { x: 3020, y: 980, radius: 42, kind: 'stump' },
@@ -204,11 +225,36 @@
     return fixed.concat(generated);
   }
 
-  function createIceZones() {
+  function createIceZones(chapter = 'chapter1') {
+    if (chapter === 'chapter2') return [
+      { x: 520, y: 1200, radius: 310 }, { x: 1380, y: 680, radius: 260 },
+      { x: 2450, y: 1320, radius: 300 }, { x: 3460, y: 2160, radius: 280 },
+      { x: 1060, y: 3280, radius: 285 }, { x: 2920, y: 3320, radius: 320 },
+      { x: 2060, y: 2460, radius: 260 },
+    ];
     return [
       { x: 680, y: 2050, radius: 230 }, { x: 1680, y: 720, radius: 210 },
       { x: 2820, y: 1840, radius: 260 }, { x: 3360, y: 3280, radius: 240 },
       { x: 1440, y: 3360, radius: 200 }, { x: 2380, y: 920, radius: 185 },
+    ];
+  }
+
+  function createIceSpikes(chapter = 'chapter1') {
+    if (chapter !== 'chapter2') return [];
+    return Array.from({ length: 18 }, (_, index) => ({
+      x: wrap(360 + (index * 719) % 3320),
+      y: wrap(520 + (index * 463) % 3100),
+      radius: [24, 30, 36][index % 3],
+      used: false,
+    })).filter((item) => distance(item, { x: C.WORLD_SIZE / 2, y: C.WORLD_SIZE / 2 }) > 520);
+  }
+
+  function createIceTornados(chapter = 'chapter1') {
+    if (chapter !== 'chapter2') return [];
+    return [
+      { x: 840, y: 720, radius: 70, angle: 0 },
+      { x: 3220, y: 3020, radius: 76, angle: 1.4 },
+      { x: 2140, y: 1080, radius: 64, angle: 2.2 },
     ];
   }
 
@@ -222,6 +268,7 @@
     updateAiSnakes(state, dt);
     updateEffects(state, dt);
     updateTerrainEffects(state, dt);
+    updateChapterTraps(state, dt);
     updateVisualEffects(state, dt);
     updateBossHazards(state, dt);
     moveSnakes(state, dt);
@@ -259,6 +306,11 @@
     for (const snake of state.snakes) {
       if (!snake.alive) continue;
       if (snake.effects.invincible > 0) snake.effects.invincible = Math.max(0, snake.effects.invincible - dt);
+      if (snake.damageWeakness > 0) snake.damageWeakness = Math.max(0, snake.damageWeakness - dt);
+      if (snake.trapCooldown > 0) snake.trapCooldown = Math.max(0, snake.trapCooldown - dt);
+      if (snake.freezeTimer > 0) snake.freezeTimer = Math.max(0, snake.freezeTimer - dt);
+      if (snake.hardSlowTimer > 0) { snake.hardSlowTimer = Math.max(0, snake.hardSlowTimer - dt); if (snake.hardSlowTimer === 0) snake.hardSlowMultiplier = 1; }
+      if (snake.turnSlowTimer > 0) { snake.turnSlowTimer = Math.max(0, snake.turnSlowTimer - dt); if (snake.turnSlowTimer === 0) snake.turnSlowMultiplier = 1; }
       if (snake.effects.giant > 0) {
         snake.effects.giant = Math.max(0, snake.effects.giant - dt);
         if (snake.effects.giant === 0) endGiant(snake);
@@ -275,6 +327,33 @@
       else snake.chilledTimer = Math.max(0, snake.chilledTimer - dt);
       if (snake.isPlayer && inIce && !snake.wasIced) state.events.push({ type: 'iceEnter', player: true });
       snake.wasIced = inIce;
+    }
+  }
+
+  function updateChapterTraps(state, dt) {
+    for (const tornado of state.iceTornados || []) tornado.angle += dt * 2.2;
+    for (const snake of state.snakes) {
+      if (!snake.alive || snake.trapCooldown > 0) continue;
+      const points = getSnakeSegments(snake);
+      for (let i = points.length - 1; i >= 0; i -= 1) {
+        for (const spike of state.iceSpikes || []) {
+          if (distance(points[i], spike) <= spike.radius + getSnakeRadius(snake) * 0.55) {
+            applyDamage(state, snake, i, 50, null, 'iceSpike');
+            snake.trapCooldown = 0.8;
+            if (snake.isPlayer) state.events.push({ type: 'iceSpike', player: true });
+          }
+        }
+        for (const tornado of state.iceTornados || []) {
+          if (distance(points[i], tornado) <= tornado.radius) {
+            applyDamage(state, snake, i, 50, null, 'iceTornado');
+            snake.x = wrap(snake.x + randomRange(-100, 100));
+            snake.y = wrap(snake.y + randomRange(-100, 100));
+            snake.trail.unshift({ x: snake.x, y: snake.y });
+            snake.trapCooldown = 1.4;
+            if (snake.isPlayer) state.events.push({ type: 'iceTornado', player: true });
+          }
+        }
+      }
     }
   }
 
@@ -370,8 +449,11 @@
       const boost = snake.isPlayer ? C.BOOST_SPEED : C.AI_BOOST_SPEED;
       const headPenalty = snake.headDamaged ? C.HEAD_DAMAGED_SPEED_MULTIPLIER : 1;
       const icePenalty = snake.chilledTimer > 0 ? C.ICE_SLOW_MULTIPLIER : 1;
-      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus) * headPenalty * icePenalty;
-      snake.angle = turnToward(snake.angle, snake.targetAngle, C.TURN_RATE * dt);
+      const hardSlow = snake.hardSlowTimer > 0 ? snake.hardSlowMultiplier : 1;
+      const frozen = snake.freezeTimer > 0 ? 0 : 1;
+      const speed = (boosting ? boost : base) * (1 + snake.mods.speedBonus) * headPenalty * icePenalty * hardSlow * frozen;
+      const turnPenalty = snake.turnSlowTimer > 0 ? snake.turnSlowMultiplier : 1;
+      snake.angle = turnToward(snake.angle, snake.targetAngle, C.TURN_RATE * turnPenalty * dt);
       snake.x = wrap(snake.x + Math.cos(snake.angle) * speed * dt);
       snake.y = wrap(snake.y + Math.sin(snake.angle) * speed * dt);
       pushSnakeOutOfObstacles(state, snake);
@@ -635,10 +717,11 @@
     const targetPoint = bossTarget || (targetSnake ? getSnakeSegments(targetSnake)[turret.target.segmentIndex] : null);
     if (!targetPoint) return;
     if (lineBlockedByObstacle(state, origin, targetPoint) && def.kind !== 'missile') return;
-    const damage = def.damage * (1 + owner.mods.damageBonus) * (owner.effects.giant > 0 ? 2 : 1);
-    if (def.kind === 'projectile') {
+    const weakness = owner.damageWeakness > 0 ? 0.9 : 1;
+    const damage = def.damage * (1 + owner.mods.damageBonus) * (owner.effects.giant > 0 ? 2 : 1) * weakness;
+    if (def.kind === 'projectile' || def.kind === 'sniper') {
       const angle = angleTo(origin, targetPoint);
-      state.projectiles.push(createProjectile(owner, origin, angle, def.projectileSpeed, damage, 1.2, owner.color, 'machine'));
+      state.projectiles.push(createProjectile(owner, origin, angle, def.projectileSpeed, damage, def.kind === 'sniper' ? 1.6 : 1.2, owner.color, def.kind === 'sniper' ? 'sniper' : 'machine'));
     } else if (def.kind === 'shotgun') {
       fireShotgun(state, owner, origin, targetPoint, def, damage);
     } else if (def.kind === 'missile') {
@@ -715,7 +798,12 @@
       if (hit) {
         if (projectile.kind === 'missile') explodeProjectile(state, projectile, owner);
         else {
-          applyDamage(state, hit.snake, hit.segmentIndex, projectile.percentDamage ? hit.snake.segments[hit.segmentIndex].maxHp * projectile.percentDamage : projectile.damage, owner, projectile.kind || 'bossBullet');
+          const hitSegment = hit.snake.segments[hit.segmentIndex];
+          if (!hitSegment) { state.projectiles.splice(index, 1); continue; }
+          applyDamage(state, hit.snake, hit.segmentIndex, projectile.percentDamage ? hitSegment.maxHp * projectile.percentDamage : projectile.damage, owner, projectile.kind || 'bossBullet');
+          if (projectile.kind === 'sniper') hit.snake.damageWeakness = Math.max(hit.snake.damageWeakness || 0, 5);
+          if (projectile.freeze) hit.snake.freezeTimer = Math.max(hit.snake.freezeTimer || 0, projectile.freeze);
+          if (projectile.splitOnHit) splitIceProjectile(state, projectile);
           if (projectile.burn && hit.snake.segments[hit.segmentIndex]) {
             hit.snake.segments[hit.segmentIndex].burn = Math.max(hit.snake.segments[hit.segmentIndex].burn || 0, projectile.burn);
             hit.snake.segments[hit.segmentIndex].burnTick = 0;
@@ -726,6 +814,12 @@
         state.projectiles.splice(index, 1);
       }
     }
+  }
+
+  function splitIceProjectile(state, projectile) {
+    const speed = Math.max(180, Math.hypot(projectile.vx, projectile.vy) * 0.75);
+    const base = Math.atan2(projectile.vy, projectile.vx);
+    [-0.45, 0.45].forEach((offset) => state.projectiles.push(createProjectile({ id: projectile.ownerId }, projectile, base + offset, speed, 50, 1.4, projectile.color, 'iceShard')));
   }
 
   function findProjectileHit(state, projectile, owner) {
@@ -999,6 +1093,9 @@
       if (boss.type === 'core') updateCoreBoss(state, boss, target, dt);
       if (boss.type === 'flame') updateFlameBoss(state, boss, target, dt);
       if (boss.type === 'viper') updateViperBoss(state, boss, target, dt);
+      if (boss.type === 'iceBreath') updateIceBreathBoss(state, boss, target, dt);
+      if (boss.type === 'iceQueen') updateIceQueenBoss(state, boss, target, dt);
+      if (boss.type === 'iceGod') updateIceGodBoss(state, boss, target, dt);
       if (boss.spitTimer <= 0) {
         spitBossXp(state, boss);
         boss.spitTimer = boss.type === 'mushroom' ? C.BOSS_CONFIG.spitInterval : C.BOSS_CONFIG.spitInterval * 1.4;
@@ -1123,6 +1220,77 @@
     }
   }
 
+  function updateIceBreathBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.spitTimer -= dt;
+    if (boss.attackTimer <= 0) {
+      for (let i = 0; i < 8; i += 1) fireBossBulletAtAngle(state, boss, i * Math.PI / 4, 80, 360, '#9eeaff', 0, { wave: i, freeze: 2, splitOnHit: true, ttl: 3.4 });
+      boss.attackTimer = 5.5;
+    }
+    if (target && boss.aoeTimer <= 0) {
+      const p = distance(boss, target) <= 500 ? target : randomPointNear(boss, 500);
+      state.bossWarnings.push({ bossId: boss.id, x: p.x, y: p.y, radius: 180, timer: 1.8, duration: 1.8, fixedDamage: 300, tailOnly: true, freeze: 5, spawnIceBalls: true, color: '#9eeaff' });
+      if (isPlayerNear(state, p, 260)) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 9;
+    }
+  }
+
+  function updateIceQueenBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.specialTimer -= dt;
+    boss.spitTimer -= dt;
+    boss.rotation += dt * 0.7;
+    if (boss.attackTimer <= 0) {
+      for (let i = 0; i < 20; i += 1) fireBossBulletAtAngle(state, boss, boss.rotation + i * Math.PI * 2 / 20, 0, 300, '#89c7ff', 0.1, { ttl: 2.7 });
+      boss.attackTimer = 4.8;
+    }
+    if (target && boss.aoeTimer <= 0) {
+      const p = { x: wrap(boss.x + Math.cos(boss.angle) * 360), y: wrap(boss.y + Math.sin(boss.angle) * 360) };
+      state.bossWarnings.push({ bossId: boss.id, x: p.x, y: p.y, radius: 95, timer: 1.8, duration: 1.8, fixedDamage: 100, hardSlow: { timer: 15, multiplier: 0.5 }, turnSlow: { timer: 15, multiplier: 0.5 }, freeze: 1, color: '#78b8ff' });
+      if (target.isPlayer) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 10;
+    }
+    if (target && boss.specialTimer <= 0) {
+      for (const snake of state.snakes) {
+        if (!snake.alive || distance(boss, snake) > 1000) continue;
+        if (snake.segments[0]) applyDamage(state, snake, 0, 150, null, 'iceGaze');
+        for (let i = snake.segments.length - 1; i >= 0; i -= 1) applyDamage(state, snake, i, 10, null, 'iceGaze');
+        snake.turnSlowTimer = Math.max(snake.turnSlowTimer || 0, 20);
+        snake.turnSlowMultiplier = Math.min(snake.turnSlowMultiplier || 1, 0.2);
+        if (snake.isPlayer) state.events.push({ type: 'iceGaze', player: true });
+      }
+      boss.specialTimer = 14;
+    }
+  }
+
+  function updateIceGodBoss(state, boss, target, dt) {
+    boss.attackTimer -= dt;
+    boss.aoeTimer -= dt;
+    boss.specialTimer -= dt;
+    boss.spitTimer -= dt;
+    if (boss.attackTimer <= 0) {
+      for (const snake of state.snakes.filter((s) => s.alive && distance(boss, s) <= 1000)) {
+        snake.hardSlowTimer = Math.max(snake.hardSlowTimer || 0, 8);
+        snake.hardSlowMultiplier = Math.min(snake.hardSlowMultiplier || 1, 0.2);
+        let hits = 0;
+        for (let i = 1; i < snake.segments.length && hits < 3; i += 1, hits += 1) applyDamage(state, snake, i, 50, null, 'godCold');
+      }
+      boss.attackTimer = 8;
+    }
+    if (target && boss.aoeTimer <= 0) {
+      const p = randomPointNear(target, 420);
+      state.bossWarnings.push({ bossId: boss.id, x: p.x, y: p.y, radius: 240, timer: 2.2, duration: 2.2, fixedDamage: 80, godShock: true, color: '#d9f8ff' });
+      if (isPlayerNear(state, p, 340)) state.events.push({ type: 'bossWarn', player: true });
+      boss.aoeTimer = 11;
+    }
+    if (boss.specialTimer <= 0) {
+      state.snakes.filter((s) => s.alive && distance(boss, s) <= 2000).slice(0, 2).forEach((snake) => applyDamage(state, snake, Math.min(1, snake.segments.length - 1), 1, null, 'farCold'));
+      boss.specialTimer = 5;
+    }
+  }
+
   function updateBossWarnings(state, dt) {
     for (let index = state.bossWarnings.length - 1; index >= 0; index -= 1) {
       const warning = state.bossWarnings[index];
@@ -1145,7 +1313,12 @@
         const segment = snake.segments[i];
         if (!segment) continue;
         if (distance(points[i], warning) <= warning.radius && !lineBlockedByObstacle(state, warning, points[i])) {
-          applyDamage(state, snake, i, segment.maxHp * (warning.damageRatio || C.BOSS_CONFIG.aoeDamageRatio), null, 'bossAoe');
+          const dmg = warning.fixedDamage !== undefined ? warning.fixedDamage : segment.maxHp * (warning.damageRatio || C.BOSS_CONFIG.aoeDamageRatio);
+          applyDamage(state, snake, warning.tailOnly ? snake.segments.length - 1 : i, dmg, null, 'bossAoe');
+          if (warning.freeze) snake.freezeTimer = Math.max(snake.freezeTimer || 0, warning.freeze);
+          if (warning.hardSlow) { snake.hardSlowTimer = Math.max(snake.hardSlowTimer || 0, warning.hardSlow.timer); snake.hardSlowMultiplier = Math.min(snake.hardSlowMultiplier || 1, warning.hardSlow.multiplier); }
+          if (warning.turnSlow) { snake.turnSlowTimer = Math.max(snake.turnSlowTimer || 0, warning.turnSlow.timer); snake.turnSlowMultiplier = Math.min(snake.turnSlowMultiplier || 1, warning.turnSlow.multiplier); }
+          if (warning.godShock) applyGodShockDebuff(snake);
           if (warning.burn && snake.segments[i]) {
             snake.segments[i].burn = Math.max(snake.segments[i].burn || 0, warning.burn);
             snake.segments[i].burnTick = 0;
@@ -1154,6 +1327,23 @@
         }
       }
     }
+    if (warning.spawnIceBalls) {
+      for (let i = 0; i < 5; i += 1) {
+        const p = randomPointNear(warning, 190);
+        state.obstacles.push({ x: p.x, y: p.y, radius: 44, kind: 'ice' });
+      }
+    }
+  }
+
+  function applyGodShockDebuff(snake) {
+    snake.hardSlowTimer = Math.max(snake.hardSlowTimer || 0, 12);
+    snake.hardSlowMultiplier = Math.min(snake.hardSlowMultiplier || 1, 0.95);
+    snake.turnSlowTimer = Math.max(snake.turnSlowTimer || 0, 12);
+    snake.turnSlowMultiplier = Math.min(snake.turnSlowMultiplier || 1, 0.95);
+    snake.mods.damageBonus = Math.max(-0.5, snake.mods.damageBonus - 0.05);
+    snake.mods.armorBonus = Math.max(0, snake.mods.armorBonus - 0.05);
+    snake.mods.regenBonus = Math.max(0, snake.mods.regenBonus - 0.05);
+    snake.mods.boostRegenBonus = Math.max(0, snake.mods.boostRegenBonus - 0.05);
   }
 
   function randomPointNear(point, radius) {
@@ -1192,22 +1382,6 @@
             snake.segments[i].burn = Math.max(snake.segments[i].burn || 0, poisonDuration);
             snake.segments[i].burnTick = 0;
           }
-        }
-      }
-    }
-  }
-
-  function resolveBossAoe(state, boss) {
-    addEffect(state, 'bossAoe', boss.x, boss.y, '#ff3b3b', C.BOSS_CONFIG.aoeRadius);
-    for (const snake of state.snakes) {
-      if (!snake.alive || snake.effects.invincible > 0) continue;
-      const points = getSnakeSegments(snake);
-      for (let i = points.length - 1; i >= 0; i -= 1) {
-        const segment = snake.segments[i];
-        if (!segment) continue;
-        if (distance(points[i], boss) <= C.BOSS_CONFIG.aoeRadius && !lineBlockedByObstacle(state, boss, points[i])) {
-          applyDamage(state, snake, i, segment.maxHp * C.BOSS_CONFIG.aoeDamageRatio, null, 'bossAoe');
-          if (snake.isPlayer) state.events.push({ type: 'bossAoeHit', player: true });
         }
       }
     }
@@ -1262,7 +1436,7 @@
   }
 
   function dropBossRewards(state, boss) {
-    const reward = boss.type === 'viper' ? [80, 50, 35, 24, 14, 3] : boss.type === 'flame' ? [55, 35, 24, 16, 8, 2] : boss.type === 'core' ? [45, 25, 16, 10, 5, 2] : [30, 20, 12, 8, 4, 2];
+    const reward = boss.type === 'iceGod' ? [90, 58, 40, 28, 16, 4] : boss.type === 'iceQueen' ? [65, 40, 28, 18, 9, 3] : boss.type === 'iceBreath' ? [48, 28, 18, 12, 6, 2] : boss.type === 'viper' ? [80, 50, 35, 24, 14, 3] : boss.type === 'flame' ? [55, 35, 24, 16, 8, 2] : boss.type === 'core' ? [45, 25, 16, 10, 5, 2] : [30, 20, 12, 8, 4, 2];
     for (let i = 0; i < reward[0]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp1', 260));
     for (let i = 0; i < reward[1]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp5', 250));
     for (let i = 0; i < reward[2]; i += 1) state.beans.push(createBeanNear(boss.x, boss.y, 'xp10', 230));
@@ -1349,7 +1523,12 @@
   function createAiSnake(state) {
     const personality = pick(C.PERSONALITIES);
     const pos = findSafePosition(state, 500);
-    return createSnake({ name: `${personality.label}-${nextSnakeId}`, color: personality.color, x: pos.x, y: pos.y, angle: randomRange(-Math.PI, Math.PI), personality });
+    const snake = createSnake({ name: `${personality.label}-${nextSnakeId}`, color: personality.color, x: pos.x, y: pos.y, angle: randomRange(-Math.PI, Math.PI), personality });
+    if (state.chapter === 'chapter2') {
+      snake.mods.damageBonus += 0.5;
+      for (const segment of snake.segments) { segment.maxHp *= 1.5; segment.hp *= 1.5; }
+    }
+    return snake;
   }
 
   function ensureBeanCounts(state) {

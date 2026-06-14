@@ -22,6 +22,7 @@
       this.drawPoisonZones(state, viewport);
       this.drawBossHazards(state, viewport);
       this.drawIceZones(state, viewport);
+      this.drawChapterTraps(state, viewport);
       this.drawObstacles(state, viewport);
       this.drawBossWarnings(state, viewport);
       this.drawBosses(state, viewport);
@@ -144,6 +145,34 @@
       }
     }
 
+    drawChapterTraps(state, viewport) {
+      for (const spike of state.iceSpikes || []) {
+        const p = this.worldToScreen(spike, state, viewport);
+        if (!isVisible(p, spike.radius + 20, viewport)) continue;
+        this.ctx.fillStyle = '#d9fbff';
+        this.ctx.strokeStyle = '#74cfff';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(p.x, p.y - spike.radius * 1.5);
+        this.ctx.lineTo(p.x + spike.radius, p.y + spike.radius);
+        this.ctx.lineTo(p.x - spike.radius, p.y + spike.radius);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.stroke();
+      }
+      for (const tornado of state.iceTornados || []) {
+        const p = this.worldToScreen(tornado, state, viewport);
+        if (!isVisible(p, tornado.radius + 30, viewport)) continue;
+        this.ctx.strokeStyle = 'rgba(197,245,255,0.75)';
+        this.ctx.lineWidth = 5;
+        for (let i = 0; i < 3; i += 1) {
+          this.ctx.beginPath();
+          this.ctx.ellipse(p.x, p.y + i * 12 - 12, tornado.radius * (0.75 - i * 0.13), 18 + i * 7, tornado.angle + i, 0, Math.PI * 2);
+          this.ctx.stroke();
+        }
+      }
+    }
+
     drawObstacles(state, viewport) {
       for (const obstacle of state.obstacles || []) {
         const p = this.worldToScreen(obstacle, state, viewport);
@@ -193,10 +222,13 @@
         if (boss.type === 'core') this.drawCoreBoss(p, boss);
         else if (boss.type === 'flame') this.drawFlameBoss(p, boss);
         else if (boss.type === 'viper') this.drawViperBoss(p, boss);
+        else if (boss.type === 'iceBreath') this.drawIceBreathBoss(p, boss);
+        else if (boss.type === 'iceQueen') this.drawIceQueenBoss(p, boss);
+        else if (boss.type === 'iceGod') this.drawIceGodBoss(p, boss);
         else this.drawMushroomBoss(p);
         this.ctx.fillStyle = 'rgba(0,0,0,0.35)';
         this.ctx.fillRect(p.x - 62, p.y - 82, 124, 9);
-        this.ctx.fillStyle = boss.type === 'viper' ? '#6dff79' : boss.type === 'flame' ? '#ff8a42' : boss.type === 'core' ? '#67d8ff' : '#ff5c86';
+        this.ctx.fillStyle = boss.type === 'iceGod' ? '#e8fbff' : boss.type === 'iceQueen' ? '#88bfff' : boss.type === 'iceBreath' ? '#9eeaff' : boss.type === 'viper' ? '#6dff79' : boss.type === 'flame' ? '#ff8a42' : boss.type === 'core' ? '#67d8ff' : '#ff5c86';
         this.ctx.fillRect(p.x - 62, p.y - 82, 124 * Math.max(0, boss.hp / boss.maxHp), 9);
       }
     }
@@ -294,6 +326,71 @@
       this.ctx.fill();
     }
 
+    drawIceBreathBoss(p, boss) {
+      this.ctx.save();
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate((boss.angle || 0) + Math.PI / 2);
+      this.ctx.fillStyle = '#bff7ff';
+      this.ctx.strokeStyle = '#5abbe9';
+      this.ctx.lineWidth = 5;
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, -78);
+      this.ctx.lineTo(24, 22);
+      this.ctx.lineTo(0, 58);
+      this.ctx.lineTo(-24, 22);
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.fillStyle = '#f4feff';
+      this.ctx.fillRect(-6, 10, 12, 72);
+      this.ctx.restore();
+    }
+
+    drawIceQueenBoss(p, boss) {
+      this.ctx.shadowColor = '#8bdcff';
+      this.ctx.shadowBlur = 16;
+      this.ctx.fillStyle = '#5fa8ff';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y - 26, 28, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#2f63b7';
+      this.ctx.beginPath();
+      this.ctx.ellipse(p.x, p.y + 22, 34, 48, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#dff9ff';
+      for (let i = -2; i <= 2; i += 1) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(p.x + i * 11, p.y - 48);
+        this.ctx.lineTo(p.x + i * 11 + 7, p.y - 28);
+        this.ctx.lineTo(p.x + i * 11 - 7, p.y - 28);
+        this.ctx.fill();
+      }
+      this.ctx.shadowBlur = 0;
+    }
+
+    drawIceGodBoss(p, boss) {
+      this.ctx.shadowColor = '#e8fbff';
+      this.ctx.shadowBlur = 24;
+      this.ctx.fillStyle = 'rgba(232,251,255,0.24)';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, 92, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#c5f4ff';
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, 58, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.strokeStyle = '#ffffff';
+      this.ctx.lineWidth = 6;
+      for (let i = 0; i < 6; i += 1) {
+        const a = i * Math.PI / 3 + (boss.rotation || 0);
+        this.ctx.beginPath();
+        this.ctx.moveTo(p.x + Math.cos(a) * 38, p.y + Math.sin(a) * 38);
+        this.ctx.lineTo(p.x + Math.cos(a) * 88, p.y + Math.sin(a) * 88);
+        this.ctx.stroke();
+      }
+      this.ctx.shadowBlur = 0;
+    }
+
     drawRewards(state, viewport) {
       for (const chest of state.chests) {
         const p = this.worldToScreen(chest, state, viewport);
@@ -354,6 +451,18 @@
           this.ctx.fillStyle = 'rgba(255,90,30,0.85)';
           this.ctx.beginPath();
           this.ctx.arc(-10, 0, 4, 0, Math.PI * 2);
+          this.ctx.fill();
+        } else if (projectile.kind === 'sniper') {
+          this.ctx.strokeStyle = '#d8fbff';
+          this.ctx.lineWidth = 5;
+          this.ctx.beginPath();
+          this.ctx.moveTo(p.x - Math.cos(projectile.angle || 0) * 13, p.y - Math.sin(projectile.angle || 0) * 13);
+          this.ctx.lineTo(p.x + Math.cos(projectile.angle || 0) * 13, p.y + Math.sin(projectile.angle || 0) * 13);
+          this.ctx.stroke();
+        } else if (projectile.kind === 'iceShard') {
+          this.ctx.fillStyle = '#c7f8ff';
+          this.ctx.beginPath();
+          this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
           this.ctx.fill();
         } else if (projectile.kind === 'shotgun') {
           this.ctx.fillStyle = projectile.color;
